@@ -259,6 +259,16 @@ mod test {
         Relay::new(RELAY_B_NAME, RELAY_B_POEM)
     }
 
+    fn create_trusting_relays() -> Result<(Relay, Relay)> {
+        let mut relay_a = create_relay_a();
+        let mut relay_b = create_relay_b();
+
+        relay_a.trust_public_key(&relay_b.get_public_key())?;
+        relay_b.trust_public_key(&relay_a.get_public_key())?;
+
+        Ok((relay_a, relay_b))
+    }
+
     #[test]
     fn test_same_messages_at_same_time() -> Result<()> {
         let mut relay = create_relay_a();
@@ -316,13 +326,9 @@ mod test {
 
     #[test]
     fn test_relay_message() -> Result<()> {
-        let mut relay_a = create_relay_a();
-        let mut relay_b = create_relay_b();
+        let (mut relay_a, mut relay_b) = create_trusting_relays()?;
 
         let now = Utc::now();
-
-        relay_a.trust_public_key(&relay_b.get_public_key())?;
-        relay_b.trust_public_key(&relay_a.get_public_key())?;
 
         let relay_a_payload = relay_a.create_payload(now)?;
         let relay_b_payload = relay_b.create_payload(now)?;
