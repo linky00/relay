@@ -3,8 +3,6 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub struct TrustedEnvelopeBundle(Vec<Envelope>);
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Envelope {
     forwarded: Vec<RelayID>,
@@ -14,15 +12,15 @@ pub struct Envelope {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Message {
-    uuid: Uuid,
-    line: String,
-    author: RelayID,
+    pub uuid: Uuid,
+    pub line: String,
+    pub author: RelayID,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct RelayID {
-    key: String,
-    name: String,
+    pub key: String,
+    pub name: String,
 }
 
 #[derive(Error, Debug)]
