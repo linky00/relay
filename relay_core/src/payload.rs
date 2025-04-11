@@ -33,7 +33,7 @@ pub struct UnverifiedPayload<'a> {
     signature: String,
     #[serde(rename(deserialize = "envelopes"))]
     #[serde(borrow)]
-    envelopes_serde_value: &'a RawValue,
+    envelopes_raw_value: &'a RawValue,
 }
 
 impl<'a> UnverifiedPayload<'a> {
@@ -57,7 +57,7 @@ impl<'a> UnverifiedPayload<'a> {
             return Err(VerifyPayloadError::PublicKeyNotTrusted);
         }
 
-        let envelope_bytes = match get_canon_json_bytes(self.envelopes_serde_value.get()) {
+        let envelope_bytes = match get_canon_json_bytes(self.envelopes_raw_value.get()) {
             Ok(envelope_bytes) => envelope_bytes,
             Err(_) => return Err(VerifyPayloadError::CannotParseJson),
         };
@@ -67,7 +67,7 @@ impl<'a> UnverifiedPayload<'a> {
         }
 
         let verified_envelopes =
-            match serde_json::from_str::<Vec<Envelope>>(self.envelopes_serde_value.get()) {
+            match serde_json::from_str::<Vec<Envelope>>(self.envelopes_raw_value.get()) {
                 Ok(envelope_vec) => envelope_vec,
                 Err(_) => return Err(VerifyPayloadError::CannotParseJson),
             };
