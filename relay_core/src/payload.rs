@@ -23,21 +23,6 @@ pub enum VerifyPayloadError {
     CannotVerifyMessage,
 }
 
-pub struct TrustedKeys(HashSet<PublicKey>);
-
-impl TrustedKeys {
-    pub fn new<I>(trusted_keys: I) -> Self
-    where
-        I: IntoIterator<Item = PublicKey>,
-    {
-        Self(trusted_keys.into_iter().collect())
-    }
-
-    fn has_key(&self, key: &PublicKey) -> bool {
-        self.0.contains(key)
-    }
-}
-
 #[derive(Error, Debug)]
 #[error("cannot deserialize json payload")]
 pub struct UntrustedPayloadJSONError;
@@ -56,16 +41,19 @@ impl<'a> UnverifiedPayload<'a> {
         serde_json::from_str(json_str).map_err(|_| UntrustedPayloadJSONError)
     }
 
-    pub fn verify(
-        self,
-        trusted_public_keys: TrustedKeys,
-    ) -> Result<VerifiedPayload, VerifyPayloadError> {
+    pub fn verify<I>(self, trusted_public_keys: I) -> Result<VerifiedPayload, VerifyPayloadError>
+    where
+        I: IntoIterator<Item = PublicKey>,
+    {
         let claimed_public_key = match PublicKey::new_from_b64(&self.me.key) {
             Ok(public_key) => public_key,
             Err(_) => return Err(VerifyPayloadError::MalformedPublicKey),
         };
 
-        if !trusted_public_keys.has_key(&claimed_public_key) {
+        if !trusted_public_keys
+            .into_iter()
+            .any(|key| key == claimed_public_key)
+        {
             return Err(VerifyPayloadError::PublicKeyNotTrusted);
         }
 
