@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::Result;
 use json_syntax::{Print, Value};
@@ -7,7 +7,7 @@ use serde_json::value::RawValue;
 use thiserror::Error;
 
 use crate::{
-    crypto::{PublicKey, SecretKey},
+    crypto::PublicKey,
     message::{Envelope, RelayID},
 };
 
@@ -29,7 +29,7 @@ pub struct UntrustedPayloadJSONError;
 
 #[derive(Deserialize)]
 pub struct UnverifiedPayload<'a> {
-    me: RelayID,
+    from: RelayID,
     signature: String,
     #[serde(rename(deserialize = "envelopes"))]
     #[serde(borrow)]
@@ -45,7 +45,7 @@ impl<'a> UnverifiedPayload<'a> {
     where
         I: IntoIterator<Item = PublicKey>,
     {
-        let claimed_public_key = match PublicKey::new_from_b64(&self.me.key) {
+        let claimed_public_key = match PublicKey::new_from_b64(&self.from.key) {
             Ok(public_key) => public_key,
             Err(_) => return Err(VerifyPayloadError::MalformedPublicKey),
         };
@@ -77,16 +77,14 @@ impl<'a> UnverifiedPayload<'a> {
 }
 
 pub struct VerifiedPayload {
-    me: RelayID,
-    signature: String,
-    envelopes: Vec<Envelope>,
+    pub(crate) from: RelayID,
+    pub(crate) envelopes: Vec<Envelope>,
 }
 
 impl VerifiedPayload {
     fn new(unverified_payload: UnverifiedPayload, envelopes: Vec<Envelope>) -> Self {
         VerifiedPayload {
-            me: unverified_payload.me,
-            signature: unverified_payload.signature,
+            from: unverified_payload.from,
             envelopes,
         }
     }
