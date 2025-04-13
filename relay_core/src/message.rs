@@ -5,12 +5,12 @@ use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Envelope {
-    forwarded: Vec<RelayID>,
-    ttl: u8,
-    message: Message,
+    pub forwarded: Vec<RelayID>,
+    pub ttl: u8,
+    pub message: Message,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Message {
     pub uuid: Uuid,
     pub line: String,
@@ -27,7 +27,7 @@ pub struct RelayID {
 #[error("cannot create uuid from this string")]
 pub struct UuidFromStringError;
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Uuid {
     internal: uuid::Uuid,
 }
