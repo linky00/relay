@@ -34,7 +34,7 @@ impl PublicKey {
         }
     }
 
-    pub fn verify<S: AsRef<str>>(&self, message: Vec<u8>, signature: S) -> Result<()> {
+    pub(crate) fn verify<S: AsRef<str>>(&self, message: Vec<u8>, signature: S) -> Result<()> {
         let signature_bytes = bytes_from_b64(signature)?;
         let signature = Signature::from_bytes(&signature_bytes);
         self.0.verify_strict(&message, &signature)?;
@@ -66,6 +66,6 @@ fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N
     }
 }
 
-fn b64_from_bytes(bytes: &[u8]) -> String {
+pub(crate) fn b64_from_bytes(bytes: &[u8]) -> String {
     BASE64_STANDARD.encode(bytes)
 }
