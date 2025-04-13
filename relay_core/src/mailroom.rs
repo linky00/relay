@@ -1,16 +1,107 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Duration, Timelike, Utc};
+use thiserror::Error;
 
-use crate::message::{Envelope, Message, RelayID, Uuid};
+use crate::{
+    message::{Envelope, Message},
+    payload::VerifiedPayload,
+};
 
-const INITIAL_TTL: u8 = 10;
+const INITIAL_TTL: u8 = 8;
+const MAX_FORWARDING_TTL: u8 = 8;
 
-struct Mailroom {
-    name: String,
-    outgoing_envelopes: HashMap<RelayID, Envelope>,
-    last_generated_at: Option<DateTime<Utc>>,
-    received_envelopes: HashMap<Uuid, Message>,
+#[derive(Error, Debug)]
+pub enum ReceivePayloadError {
+    #[error("already received payload from this key")]
+    AlreadyReceivedFromKey,
+}
+
+pub struct Mailroom<A: Archive> {
+    new_messages: HashSet<Message>,
+    forwarding_received_this_hour: HashMap<String, Vec<Envelope>>,
+    forwarding_received_last_hour: HashMap<String, Vec<Envelope>>,
+    last_seen_time: Option<DateTime<Utc>>,
+    config: Config,
+    archive: A,
+}
+
+impl<A: Archive> Mailroom<A> {
+    pub fn new(config: Config, archive: A) -> Self {
+        Mailroom {
+            new_messages: HashSet::new(),
+            forwarding_received_this_hour: HashMap::new(),
+            forwarding_received_last_hour: HashMap::new(),
+            last_seen_time: None,
+            config,
+            archive,
+        }
+    }
+
+    pub fn receive_payload(&mut self, payload: VerifiedPayload) -> Result<(), ReceivePayloadError> {
+        self.receive_payload_at_time(payload, Utc::now())
+    }
+
+    #[cfg(feature = "chrono")]
+    pub fn receive_payload_at_time(
+        &mut self,
+        payload: VerifiedPayload,
+        now: DateTime<Utc>,
+    ) -> Result<(), ReceivePayloadError> {
+        self.handle_time(now);
+
+        let from_key = payload.from.key;
+
+        if self.forwarding_received_this_hour.contains_key(&from_key) {
+            return Err(ReceivePayloadError::AlreadyReceivedFromKey);
+        }
+
+        let mut forwarding_from_this_key = vec![];
+
+        for envelope in payload.envelopes {
+            self.archive.add_envelope_to_archive(&envelope);
+
+            if self.new_messages.contains(&envelope.message) {
+                forwarding_from_this_key.push(envelope);
+            } else if !self.archive.is_message_in_archive(&envelope.message) {
+                self.new_messages.insert(envelope.message.clone());
+                forwarding_from_this_key.push(envelope);
+            }
+        }
+
+        self.forwarding_received_this_hour
+            .insert(from_key, forwarding_from_this_key);
+
+        Ok(())
+    }
+
+    fn handle_time(&mut self, now: DateTime<Utc>) {
+        if let Some(last_seen_time) = self.last_seen_time {
+            let on_the_hour = |datetime: DateTime<Utc>| {
+                datetime
+                    .with_minute(0)
+                    .expect("should be able to set any utc time to minute 0")
+                    .with_second(0)
+                    .expect("should be able to set any utc time to second 0")
+                    .with_nanosecond(0)
+                    .expect("should be able to set any utc time to nanosecond 0")
+            };
+
+            let now_oth = on_the_hour(now);
+            let last_seen_oth = on_the_hour(last_seen_time);
+
+            if now_oth == last_seen_oth + Duration::hours(1) {
+                self.new_messages = HashSet::new();
+                self.forwarding_received_last_hour = self.forwarding_received_this_hour.clone();
+                self.forwarding_received_this_hour = HashMap::new();
+            } else if now_oth != last_seen_oth {
+                self.new_messages = HashSet::new();
+                self.forwarding_received_last_hour = HashMap::new();
+                self.forwarding_received_this_hour = HashMap::new();
+            }
+        }
+        self.last_seen_time = Some(now);
+    }
 }
 
 // impl Mailroom {
@@ -86,8 +177,24 @@ struct Mailroom {
 //     }
 // }
 
-trait MessageArchive {
-    fn is_message_in_archive(uuid: Uuid) -> bool;
+pub struct Config {
+    pub name: String,
+    pub initial_ttl: u8,
+    pub max_forwarding_ttl: u8,
+}
 
-    fn add_message_to_archive(message: Message);
+impl Config {
+    pub fn new<S: AsRef<str>>(name: S) -> Config {
+        Config {
+            name: name.as_ref().into(),
+            initial_ttl: INITIAL_TTL,
+            max_forwarding_ttl: MAX_FORWARDING_TTL,
+        }
+    }
+}
+
+pub trait Archive {
+    fn is_message_in_archive(&self, message: &Message) -> bool;
+
+    fn add_envelope_to_archive(&mut self, envelope: &Envelope);
 }
