@@ -35,6 +35,14 @@ impl PublicKey {
         }
     }
 
+    pub fn as_bytes(&self) -> &[u8; PUBLIC_KEY_LENGTH] {
+        self.0.as_bytes()
+    }
+
+    pub fn to_string(&self) -> String {
+        b64_from_bytes(self.as_bytes())
+    }
+
     pub(crate) fn verify<S: AsRef<str>>(&self, message: Vec<u8>, signature: S) -> Result<()> {
         let signature_bytes = bytes_from_b64(signature)?;
         let signature = Signature::from_bytes(&signature_bytes);
@@ -60,12 +68,16 @@ impl SecretKey {
         Self(SigningKey::from_bytes(bytes))
     }
 
-    pub fn as_string(&self) -> String {
-        b64_from_bytes(self.0.as_bytes())
+    pub fn as_bytes(&self) -> &[u8; SECRET_KEY_LENGTH] {
+        self.0.as_bytes()
     }
 
-    pub fn public_key_string(&self) -> String {
-        b64_from_bytes(self.0.verifying_key().as_bytes())
+    pub fn to_string(&self) -> String {
+        b64_from_bytes(self.as_bytes())
+    }
+
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey(self.0.verifying_key())
     }
 
     pub(crate) fn sign(&mut self, message: &[u8]) -> Result<String> {
