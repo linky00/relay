@@ -54,6 +54,10 @@ impl SecretKey {
     pub fn new_from_bytes(bytes: &[u8; SECRET_KEY_LENGTH]) -> Self {
         Self(SigningKey::from_bytes(bytes))
     }
+
+    pub(crate) fn get_public_key_string(&self) -> String {
+        b64_from_bytes(self.0.verifying_key().as_bytes())
+    }
 }
 
 fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N], NewKeyError> {
@@ -66,6 +70,6 @@ fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N
     }
 }
 
-// pub(crate) fn b64_from_bytes(bytes: &[u8]) -> String {
-//     BASE64_STANDARD.encode(bytes)
-// }
+fn b64_from_bytes(bytes: &[u8]) -> String {
+    BASE64_STANDARD.encode(bytes)
+}

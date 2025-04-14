@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use thiserror::Error;
 
 use crate::{
-    crypto::PublicKey,
+    crypto::{PublicKey, SecretKey},
     message::{Envelope, Message, RelayID},
     payload::VerifiedPayload,
 };
@@ -26,19 +26,17 @@ pub struct Mailroom<A: Archive> {
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
     last_seen_time: Option<DateTime<Utc>>,
-    identity: RelayID,
-    config: Config,
+    config: MailroomConfig,
     archive: A,
 }
 
 impl<A: Archive> Mailroom<A> {
-    pub fn new(identity: RelayID, config: Config, archive: A) -> Self {
+    pub fn new(config: MailroomConfig, archive: A) -> Self {
         Mailroom {
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
             last_seen_time: None,
-            identity,
             config,
             archive,
         }
@@ -102,7 +100,11 @@ impl<A: Archive> Mailroom<A> {
             .filter(|(from_key, _)| *from_key != sending_to)
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
-                envelope.ttl -= self.config.max_forwarding_ttl.min(envelope.ttl - 1);
+                envelope.ttl -= self
+                    .config
+                    .ttl_config
+                    .max_forwarding_ttl
+                    .min(envelope.ttl - 1);
                 if envelope.ttl > 0 {
                     Some(envelope)
                 } else {
@@ -113,12 +115,14 @@ impl<A: Archive> Mailroom<A> {
 
         sending_envelopes.push(Envelope {
             forwarded: vec![],
-            ttl: self.config.initial_ttl,
-            message: Message::new(line, self.identity.clone()),
+            ttl: self.config.ttl_config.initial_ttl,
+            message: Message::new(line, self.config.relay_id.clone()),
         });
 
         OutgoingEnvelopes {
             envelopes: sending_envelopes,
+            relay_id: self.config.relay_id.clone(),
+            secret_key: self.config.secret_key.clone(),
         }
     }
 
@@ -151,24 +155,51 @@ impl<A: Archive> Mailroom<A> {
     }
 }
 
-pub struct Config {
-    pub name: String,
-    pub initial_ttl: u8,
-    pub max_forwarding_ttl: u8,
+pub struct OutgoingEnvelopes {
+    pub(crate) envelopes: Vec<Envelope>,
+    pub(crate) relay_id: RelayID,
+    pub(crate) secret_key: SecretKey,
 }
 
-impl Config {
-    pub fn new<S: AsRef<str>>(name: S) -> Config {
-        Config {
-            name: name.as_ref().into(),
-            initial_ttl: DEFAULT_INITIAL_TTL,
-            max_forwarding_ttl: DEFAULT_MAX_FORWARDING_TTL,
+impl OutgoingEnvelopes {
+    pub fn envelopes(&self) -> &[Envelope] {
+        &self.envelopes
+    }
+}
+
+pub struct MailroomConfig {
+    pub(crate) relay_id: RelayID,
+    pub(crate) secret_key: SecretKey,
+    pub(crate) ttl_config: TTLConfig,
+}
+
+impl MailroomConfig {
+    pub fn new(name: String, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
+        let relay_id = RelayID {
+            key: secret_key.get_public_key_string(),
+            name,
+        };
+
+        Self {
+            relay_id,
+            secret_key,
+            ttl_config,
         }
     }
 }
 
-pub struct OutgoingEnvelopes {
-    pub(crate) envelopes: Vec<Envelope>,
+pub struct TTLConfig {
+    pub initial_ttl: u8,
+    pub max_forwarding_ttl: u8,
+}
+
+impl TTLConfig {
+    pub fn default() -> TTLConfig {
+        TTLConfig {
+            initial_ttl: DEFAULT_INITIAL_TTL,
+            max_forwarding_ttl: DEFAULT_MAX_FORWARDING_TTL,
+        }
+    }
 }
 
 pub trait Archive {

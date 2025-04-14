@@ -9,9 +9,9 @@ pub struct Envelope {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Message {
-    pub(crate) uuid: String,
-    pub(crate) line: String,
-    pub(crate) author: RelayID,
+    pub uuid: String,
+    pub line: String,
+    pub author: RelayID,
 }
 
 impl Message {
@@ -26,6 +26,6 @@ impl Message {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct RelayID {
-    pub(crate) key: String,
-    pub(crate) name: String,
+    pub key: String,
+    pub name: String,
 }
