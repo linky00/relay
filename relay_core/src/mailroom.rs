@@ -170,7 +170,7 @@ pub struct MailroomConfig {
 impl MailroomConfig {
     pub fn new(name: String, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
         let relay_id = RelayID {
-            key: secret_key.get_public_key_string(),
+            key: secret_key.public_key_string(),
             name,
         };
 

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey, ed25519::signature::SignerMut};
+use rand::rngs::OsRng;
 use thiserror::Error;
 
 pub const PUBLIC_KEY_LENGTH: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
@@ -47,6 +48,10 @@ impl PublicKey {
 pub struct SecretKey(SigningKey);
 
 impl SecretKey {
+    pub fn generate() -> Self {
+        Self(SigningKey::generate(&mut OsRng))
+    }
+
     pub fn new_from_b64<S: AsRef<str>>(b64_string: S) -> Result<Self, NewKeyError> {
         bytes_from_b64(b64_string).map(|bytes| Self::new_from_bytes(&bytes))
     }
@@ -55,7 +60,11 @@ impl SecretKey {
         Self(SigningKey::from_bytes(bytes))
     }
 
-    pub(crate) fn get_public_key_string(&self) -> String {
+    pub fn as_string(&self) -> String {
+        b64_from_bytes(self.0.as_bytes())
+    }
+
+    pub fn public_key_string(&self) -> String {
         b64_from_bytes(self.0.verifying_key().as_bytes())
     }
 
