@@ -43,11 +43,19 @@ impl<A: Archive> Mailroom<A> {
     }
 
     pub fn receive_payload(&mut self, payload: VerifiedPayload) -> Result<(), ReceivePayloadError> {
-        self.receive_payload_at_time(payload, Utc::now())
+        self.receive_payload_at_time_internal(payload, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
     pub fn receive_payload_at_time(
+        &mut self,
+        payload: VerifiedPayload,
+        now: DateTime<Utc>,
+    ) -> Result<(), ReceivePayloadError> {
+        self.receive_payload_at_time_internal(payload, now)
+    }
+
+    fn receive_payload_at_time_internal(
         &mut self,
         payload: VerifiedPayload,
         now: DateTime<Utc>,
@@ -82,11 +90,20 @@ impl<A: Archive> Mailroom<A> {
     }
 
     pub fn get_outgoing(&mut self, sending_to: &PublicKey, line: String) -> OutgoingEnvelopes {
-        self.get_outgoing_at_time(sending_to, line, Utc::now())
+        self.get_outgoing_at_time_internal(sending_to, line, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
     pub fn get_outgoing_at_time(
+        &mut self,
+        sending_to: &PublicKey,
+        line: String,
+        now: DateTime<Utc>,
+    ) -> OutgoingEnvelopes {
+        self.get_outgoing_at_time_internal(sending_to, line, now)
+    }
+
+    fn get_outgoing_at_time_internal(
         &mut self,
         sending_to: &PublicKey,
         line: String,
@@ -168,10 +185,10 @@ pub struct MailroomConfig {
 }
 
 impl MailroomConfig {
-    pub fn new(name: String, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
+    pub fn new<S: AsRef<str>>(name: S, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
         let relay_id = RelayID {
             key: secret_key.public_key().to_string(),
-            name,
+            name: name.as_ref().into(),
         };
 
         Self {
