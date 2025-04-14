@@ -17,5 +17,4 @@ thiserror = "2.0.12"
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 
 [features]
-default = ["chrono"]
 chrono = []
