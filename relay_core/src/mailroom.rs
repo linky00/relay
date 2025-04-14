@@ -89,24 +89,28 @@ impl<A: Archive> Mailroom<A> {
         Ok(())
     }
 
-    pub fn get_outgoing(&mut self, sending_to: &PublicKey, line: String) -> OutgoingEnvelopes {
+    pub fn get_outgoing<S: AsRef<str>>(
+        &mut self,
+        sending_to: &PublicKey,
+        line: S,
+    ) -> OutgoingEnvelopes {
         self.get_outgoing_at_time_internal(sending_to, line, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
-    pub fn get_outgoing_at_time(
+    pub fn get_outgoing_at_time<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
-        line: String,
+        line: S,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.get_outgoing_at_time_internal(sending_to, line, now)
     }
 
-    fn get_outgoing_at_time_internal(
+    fn get_outgoing_at_time_internal<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
-        line: String,
+        line: S,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.handle_time(now);
@@ -133,7 +137,7 @@ impl<A: Archive> Mailroom<A> {
         sending_envelopes.push(Envelope {
             forwarded: vec![],
             ttl: self.config.ttl_config.initial_ttl,
-            message: Message::new(line, self.config.relay_id.clone()),
+            message: Message::new(line.as_ref().into(), self.config.relay_id.clone()),
         });
 
         OutgoingEnvelopes {
