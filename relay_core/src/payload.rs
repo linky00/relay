@@ -72,21 +72,27 @@ impl<'a> UnverifiedPayload<'a> {
                 Err(_) => return Err(VerifyPayloadError::CannotParseJson),
             };
 
-        Ok(VerifiedPayload::new(self, verified_envelopes))
+        Ok(VerifiedPayload {
+            from: self.from,
+            public_key: claimed_public_key,
+            envelopes: verified_envelopes,
+        })
     }
 }
 
 pub struct VerifiedPayload {
+    pub(crate) public_key: PublicKey,
     pub(crate) from: RelayID,
     pub(crate) envelopes: Vec<Envelope>,
 }
 
 impl VerifiedPayload {
-    fn new(unverified_payload: UnverifiedPayload, envelopes: Vec<Envelope>) -> Self {
-        VerifiedPayload {
-            from: unverified_payload.from,
-            envelopes,
-        }
+    pub fn from(&self) -> &RelayID {
+        &self.from
+    }
+
+    pub fn envelopes(&self) -> &Vec<Envelope> {
+        &self.envelopes
     }
 }
 

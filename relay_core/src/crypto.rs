@@ -16,7 +16,7 @@ pub enum NewKeyError {
     InvalidKey,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct PublicKey(VerifyingKey);
 
 impl PublicKey {
@@ -66,6 +66,6 @@ fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N
     }
 }
 
-pub(crate) fn b64_from_bytes(bytes: &[u8]) -> String {
-    BASE64_STANDARD.encode(bytes)
-}
+// pub(crate) fn b64_from_bytes(bytes: &[u8]) -> String {
+//     BASE64_STANDARD.encode(bytes)
+// }
