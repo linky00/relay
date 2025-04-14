@@ -26,28 +26,22 @@ pub struct Mailroom<A: Archive> {
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
     last_seen_time: Option<DateTime<Utc>>,
-    config: MailroomConfig,
     archive: A,
 }
 
 impl<A: Archive> Mailroom<A> {
-    pub fn new(config: MailroomConfig, archive: A) -> Self {
+    pub fn new(archive: A) -> Self {
         Mailroom {
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
             last_seen_time: None,
-            config,
             archive,
         }
     }
 
-    pub fn update_config(&mut self, config: MailroomConfig) {
-        self.config = config;
-    }
-
     pub fn receive_payload(&mut self, payload: VerifiedPayload) -> Result<(), ReceivePayloadError> {
-        self.receive_payload_at_time_internal(payload, Utc::now())
+        self.receive_payload_internal(payload, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
@@ -56,10 +50,10 @@ impl<A: Archive> Mailroom<A> {
         payload: VerifiedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), ReceivePayloadError> {
-        self.receive_payload_at_time_internal(payload, now)
+        self.receive_payload_internal(payload, now)
     }
 
-    fn receive_payload_at_time_internal(
+    fn receive_payload_internal(
         &mut self,
         payload: VerifiedPayload,
         now: DateTime<Utc>,
@@ -97,8 +91,9 @@ impl<A: Archive> Mailroom<A> {
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
+        outgoing_config: &OutgoingConfig,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_at_time_internal(sending_to, line, Utc::now())
+        self.get_outgoing_internal(sending_to, line, Utc::now(), outgoing_config)
     }
 
     #[cfg(feature = "chrono")]
@@ -107,15 +102,17 @@ impl<A: Archive> Mailroom<A> {
         sending_to: &PublicKey,
         line: Option<S>,
         now: DateTime<Utc>,
+        outgoing_config: &OutgoingConfig,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_at_time_internal(sending_to, line, now)
+        self.get_outgoing_internal(sending_to, line, now, outgoing_config)
     }
 
-    fn get_outgoing_at_time_internal<S: AsRef<str>>(
+    fn get_outgoing_internal<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
         now: DateTime<Utc>,
+        outgoing_config: &OutgoingConfig,
     ) -> OutgoingEnvelopes {
         self.handle_time(now);
 
@@ -125,8 +122,7 @@ impl<A: Archive> Mailroom<A> {
             .filter(|(from_key, _)| *from_key != sending_to)
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
-                envelope.ttl -= self
-                    .config
+                envelope.ttl -= outgoing_config
                     .ttl_config
                     .max_forwarding_ttl
                     .min(envelope.ttl - 1);
@@ -141,15 +137,15 @@ impl<A: Archive> Mailroom<A> {
         if let Some(line) = line {
             sending_envelopes.push(Envelope {
                 forwarded: vec![],
-                ttl: self.config.ttl_config.initial_ttl,
-                message: Message::new(line.as_ref().into(), self.config.relay_id.clone()),
+                ttl: outgoing_config.ttl_config.initial_ttl,
+                message: Message::new(line.as_ref().into(), outgoing_config.relay_id.clone()),
             });
         }
 
         OutgoingEnvelopes {
             envelopes: sending_envelopes,
-            relay_id: self.config.relay_id.clone(),
-            secret_key: self.config.secret_key.clone(),
+            relay_id: outgoing_config.relay_id.clone(),
+            secret_key: outgoing_config.secret_key.clone(),
         }
     }
 
@@ -188,13 +184,13 @@ pub struct OutgoingEnvelopes {
     pub(crate) secret_key: SecretKey,
 }
 
-pub struct MailroomConfig {
+pub struct OutgoingConfig {
     pub(crate) relay_id: RelayID,
     pub(crate) secret_key: SecretKey,
     pub(crate) ttl_config: TTLConfig,
 }
 
-impl MailroomConfig {
+impl OutgoingConfig {
     pub fn new<S: AsRef<str>>(name: S, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
         let relay_id = RelayID {
             key: secret_key.public_key().to_string(),
