@@ -2,12 +2,13 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use json_syntax::{Print, Value};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use thiserror::Error;
 
 use crate::{
     crypto::PublicKey,
+    mailroom::OutgoingEnvelopes,
     message::{Envelope, RelayID},
 };
 
@@ -94,6 +95,48 @@ impl VerifiedPayload {
     pub fn envelopes(&self) -> &Vec<Envelope> {
         &self.envelopes
     }
+}
+
+#[derive(Error, Debug)]
+pub enum CreatePayloadError {
+    #[error("cannot serialize into json for some reason")]
+    CannotSerializeJson,
+    #[error("cannot sign json for some reason")]
+    CannotSignJson,
+}
+
+impl OutgoingEnvelopes {
+    pub fn create_payload(&self) -> Result<String, CreatePayloadError> {
+        let envelopes_json = serde_json::to_string(&self.envelopes)
+            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
+
+        let envelopes_bytes = get_canon_json_bytes(&envelopes_json)
+            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
+
+        let signature = self
+            .secret_key
+            .clone()
+            .sign(&envelopes_bytes)
+            .map_err(|_| CreatePayloadError::CannotSignJson)?;
+
+        let outgoing_payload = OutgoingPayload {
+            from: &self.relay_id,
+            signature: signature,
+            envelopes: &self.envelopes,
+        };
+
+        let payload_json = serde_json::to_string(&outgoing_payload)
+            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
+
+        Ok(payload_json)
+    }
+}
+
+#[derive(Serialize)]
+struct OutgoingPayload<'a> {
+    from: &'a RelayID,
+    signature: String,
+    envelopes: &'a Vec<Envelope>,
 }
 
 fn get_canon_json_bytes(json_string: &str) -> Result<Vec<u8>> {

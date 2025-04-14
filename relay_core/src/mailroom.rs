@@ -156,15 +156,9 @@ impl<A: Archive> Mailroom<A> {
 }
 
 pub struct OutgoingEnvelopes {
-    pub(crate) envelopes: Vec<Envelope>,
+    pub envelopes: Vec<Envelope>,
     pub(crate) relay_id: RelayID,
     pub(crate) secret_key: SecretKey,
-}
-
-impl OutgoingEnvelopes {
-    pub fn envelopes(&self) -> &[Envelope] {
-        &self.envelopes
-    }
 }
 
 pub struct MailroomConfig {

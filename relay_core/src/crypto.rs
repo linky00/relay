@@ -1,6 +1,6 @@
 use anyhow::Result;
 use base64::{Engine, prelude::BASE64_STANDARD};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey, ed25519::signature::SignerMut};
 use thiserror::Error;
 
 pub const PUBLIC_KEY_LENGTH: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
@@ -57,6 +57,10 @@ impl SecretKey {
 
     pub(crate) fn get_public_key_string(&self) -> String {
         b64_from_bytes(self.0.verifying_key().as_bytes())
+    }
+
+    pub(crate) fn sign(&mut self, message: &[u8]) -> Result<String> {
+        Ok(b64_from_bytes(&self.0.try_sign(message)?.to_bytes()))
     }
 }
 
