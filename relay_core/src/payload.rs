@@ -25,8 +25,10 @@ pub enum VerifyPayloadError {
 }
 
 #[derive(Error, Debug)]
-#[error("cannot deserialize json payload")]
-pub struct UntrustedPayloadJSONError;
+pub enum UnverifiedPayloadError {
+    #[error("cannot deserialize json payload")]
+    CannotDeserializeJson,
+}
 
 #[derive(Deserialize)]
 pub struct UnverifiedPayload<'a> {
@@ -38,8 +40,8 @@ pub struct UnverifiedPayload<'a> {
 }
 
 impl<'a> UnverifiedPayload<'a> {
-    pub fn from_json(json_str: &'a str) -> Result<Self, UntrustedPayloadJSONError> {
-        serde_json::from_str(json_str).map_err(|_| UntrustedPayloadJSONError)
+    pub fn from_json(json_str: &'a str) -> Result<Self, UnverifiedPayloadError> {
+        serde_json::from_str(json_str).map_err(|_| UnverifiedPayloadError::CannotDeserializeJson)
     }
 
     pub fn verify<I>(self, trusted_public_keys: I) -> Result<VerifiedPayload, VerifyPayloadError>
