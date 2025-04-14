@@ -124,7 +124,7 @@ impl<A: Archive> Mailroom<A> {
         line: Option<S>,
         outgoing_config: &OutgoingConfig,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, line, Utc::now(), outgoing_config)
+        self.get_outgoing_internal(sending_to, line, outgoing_config, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
@@ -132,18 +132,18 @@ impl<A: Archive> Mailroom<A> {
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
-        now: DateTime<Utc>,
         outgoing_config: &OutgoingConfig,
+        now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, line, now, outgoing_config)
+        self.get_outgoing_internal(sending_to, line, outgoing_config, now)
     }
 
     fn get_outgoing_internal<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
-        now: DateTime<Utc>,
         outgoing_config: &OutgoingConfig,
+        now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.handle_time(now);
 
