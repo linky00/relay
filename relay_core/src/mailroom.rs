@@ -96,7 +96,7 @@ impl<A: Archive> Mailroom<A> {
     pub fn get_outgoing<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
-        line: S,
+        line: Option<S>,
     ) -> OutgoingEnvelopes {
         self.get_outgoing_at_time_internal(sending_to, line, Utc::now())
     }
@@ -105,7 +105,7 @@ impl<A: Archive> Mailroom<A> {
     pub fn get_outgoing_at_time<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
-        line: S,
+        line: Option<S>,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.get_outgoing_at_time_internal(sending_to, line, now)
@@ -114,7 +114,7 @@ impl<A: Archive> Mailroom<A> {
     fn get_outgoing_at_time_internal<S: AsRef<str>>(
         &mut self,
         sending_to: &PublicKey,
-        line: S,
+        line: Option<S>,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.handle_time(now);
@@ -138,11 +138,13 @@ impl<A: Archive> Mailroom<A> {
             })
             .collect();
 
-        sending_envelopes.push(Envelope {
-            forwarded: vec![],
-            ttl: self.config.ttl_config.initial_ttl,
-            message: Message::new(line.as_ref().into(), self.config.relay_id.clone()),
-        });
+        if let Some(line) = line {
+            sending_envelopes.push(Envelope {
+                forwarded: vec![],
+                ttl: self.config.ttl_config.initial_ttl,
+                message: Message::new(line.as_ref().into(), self.config.relay_id.clone()),
+            });
+        }
 
         OutgoingEnvelopes {
             envelopes: sending_envelopes,

@@ -14,6 +14,6 @@ fn create_payload() {
     let mut mailroom = Mailroom::new(config, mock_archive);
 
     let sending_to = SecretKey::generate().public_key();
-    let outgoing_envelopes = mailroom.get_outgoing(&sending_to, "poetry!");
+    let outgoing_envelopes = mailroom.get_outgoing(&sending_to, Some("poetry!"));
     outgoing_envelopes.create_payload().unwrap();
 }
