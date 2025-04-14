@@ -604,6 +604,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "relay_text"
+version = "0.1.0"
+dependencies = [
+ "relay_server",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
