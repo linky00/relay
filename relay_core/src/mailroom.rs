@@ -42,6 +42,10 @@ impl<A: Archive> Mailroom<A> {
         }
     }
 
+    pub fn update_config(&mut self, config: MailroomConfig) {
+        self.config = config;
+    }
+
     pub fn receive_payload(&mut self, payload: VerifiedPayload) -> Result<(), ReceivePayloadError> {
         self.receive_payload_at_time_internal(payload, Utc::now())
     }
