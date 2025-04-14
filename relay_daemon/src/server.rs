@@ -1,9 +1,4 @@
-use std::collections::HashSet;
-
-use relay_core::{
-    crypto::PublicKey,
-    mailroom::{Archive, Mailroom},
-};
+use relay_core::mailroom::{Archive, Mailroom};
 
 use crate::config::ReadConfig;
 
