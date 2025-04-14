@@ -29,3 +29,10 @@ impl Archive for DBArchive {
         todo!()
     }
 }
+
+enum LineOutput {
+    Single(String),
+    Loop { poem: Vec<String>, next_idx: usize },
+    Once { poem: Vec<String>, next_idx: usize },
+    None,
+}
