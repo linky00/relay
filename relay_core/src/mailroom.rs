@@ -27,16 +27,47 @@ pub struct Mailroom<A: Archive> {
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
     last_seen_time: Option<DateTime<Utc>>,
     archive: A,
+    flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
+    interval: Duration,
 }
 
 impl<A: Archive> Mailroom<A> {
     pub fn new(archive: A) -> Self {
+        let flatten_time = |datetime: DateTime<Utc>| {
+            datetime
+                .with_minute(0)
+                .expect("should be able to set any utc time to minute 0")
+                .with_second(0)
+                .expect("should be able to set any utc time to second 0")
+                .with_nanosecond(0)
+                .expect("should be able to set any utc time to nanosecond 0")
+        };
+
         Mailroom {
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
             last_seen_time: None,
             archive,
+            flatten_time,
+            interval: Duration::hours(1),
+        }
+    }
+
+    #[cfg(feature = "chrono")]
+    pub fn new_with_custom_time(
+        archive: A,
+        flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
+        interval: Duration,
+    ) -> Mailroom<A> {
+        Mailroom {
+            new_messages: HashSet::new(),
+            forwarding_received_this_hour: HashMap::new(),
+            forwarding_received_last_hour: HashMap::new(),
+            last_seen_time: None,
+            archive,
+            flatten_time,
+            interval,
         }
     }
 
@@ -151,20 +182,10 @@ impl<A: Archive> Mailroom<A> {
 
     fn handle_time(&mut self, now: DateTime<Utc>) {
         if let Some(last_seen_time) = self.last_seen_time {
-            let on_the_hour = |datetime: DateTime<Utc>| {
-                datetime
-                    .with_minute(0)
-                    .expect("should be able to set any utc time to minute 0")
-                    .with_second(0)
-                    .expect("should be able to set any utc time to second 0")
-                    .with_nanosecond(0)
-                    .expect("should be able to set any utc time to nanosecond 0")
-            };
+            let now_oth = (self.flatten_time)(now);
+            let last_seen_oth = (self.flatten_time)(last_seen_time);
 
-            let now_oth = on_the_hour(now);
-            let last_seen_oth = on_the_hour(last_seen_time);
-
-            if now_oth == last_seen_oth + Duration::hours(1) {
+            if now_oth == last_seen_oth + self.interval {
                 self.new_messages = HashSet::new();
                 self.forwarding_received_last_hour = self.forwarding_received_this_hour.clone();
                 self.forwarding_received_this_hour = HashMap::new();
