@@ -18,9 +18,6 @@ pub enum ReceivePayloadError {
     AlreadyReceivedFromKey,
 }
 
-#[derive(Error, Debug)]
-pub enum CreateOutgoingEnvelopesError {}
-
 pub struct Mailroom<A: Archive> {
     new_messages: HashSet<Message>,
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
