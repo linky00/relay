@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 relay_core = { path = "../relay_core" }
 sqlx = { version = "0.8.4", features = ["sqlite"] }
+tokio = { version = "1.44.2", features = ["full"] }
 tokio-cron-scheduler = "0.13.0"

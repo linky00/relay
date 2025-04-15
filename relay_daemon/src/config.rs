@@ -1,13 +1,14 @@
 use std::collections::HashSet;
 
 pub struct Config {
-    name: String,
-    trusted_keys: HashSet<String>,
-    contacting_hosts: HashSet<String>,
-    initial_ttl: Option<u8>,
-    max_forwarding_ttl: Option<u8>,
+    pub name: String,
+    pub trusted_keys: HashSet<String>,
+    pub contacting_hosts: HashSet<String>,
+    pub initial_ttl: Option<u8>,
+    pub max_forwarding_ttl: Option<u8>,
+    pub fast_mode: bool,
 }
 
 pub trait ReadConfig {
-    fn read_config(&self) -> &Config;
+    fn read(&self) -> &Config;
 }
