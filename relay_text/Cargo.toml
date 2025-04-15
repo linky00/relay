@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-relay_server = { path = "../relay_daemon" }
+relay_daemon = { path = "../relay_daemon" }

@@ -1223,7 +1223,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "relay_server"
+name = "relay_daemon"
 version = "0.1.0"
 dependencies = [
  "relay_core",
@@ -1234,7 +1234,7 @@ dependencies = [
 name = "relay_text"
 version = "0.1.0"
 dependencies = [
- "relay_server",
+ "relay_daemon",
 ]
 
 [[package]]
