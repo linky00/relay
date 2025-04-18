@@ -1,27 +1,26 @@
 use std::sync::Arc;
 
 use relay_core::mailroom::Mailroom;
+use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{archive::MockArchive, config::GetConfig, line::GetLine};
 
-pub struct RelayDaemon<C: GetConfig, L: GetLine> {
-    mailroom: Mailroom<MockArchive>,
-    config: C,
-    line: L,
+mod exchange;
+
+pub struct Daemon<L, C> {
+    state: Arc<DaemonState<L, C>>,
     fast_mode: bool,
 }
 
-impl<C, L> RelayDaemon<C, L>
+impl<L, C> Daemon<L, C>
 where
     L: GetLine + Sync + Send + 'static,
     C: GetConfig + Sync + Send + 'static,
 {
     pub fn new(line: L, config: C) -> Self {
         Self {
-            mailroom: Mailroom::new(MockArchive::new()),
-            config,
-            line,
+            state: Arc::new(DaemonState::new(line, config)),
             fast_mode: false,
         }
     }
@@ -33,28 +32,58 @@ where
         }
     }
 
-    pub async fn start_sending_to_hosts(self: &Arc<Self>) {
-        let sched = JobScheduler::new().await.unwrap();
+    pub async fn start_sending_to_hosts(&self) {
+        let scheduler = JobScheduler::new().await.unwrap();
 
-        let send_to_hosts_schedule = match self.fast_mode {
-            true => "* * * * * *",
-            false => "0 * * * *",
-        };
-        let self_clone = self.clone();
-        sched
+        let state_clone = self.state.clone();
+        let fast_mode = self.fast_mode;
+        scheduler
             .add(
-                Job::new(send_to_hosts_schedule, move |_, _| {
-                    self_clone.send_to_hosts();
-                })
+                Job::new_async(
+                    match self.fast_mode {
+                        true => "* * * * * *",
+                        false => "0 * * * *",
+                    },
+                    move |_, _| {
+                        let state_clone = state_clone.clone();
+                        Box::pin(async move {
+                            if let Some(config) = state_clone.config.get() {
+                                exchange::send_to_hosts(
+                                    &state_clone.mailroom,
+                                    state_clone.line.get(),
+                                    config,
+                                    fast_mode,
+                                )
+                                .await;
+                            }
+                        })
+                    },
+                )
                 .unwrap(),
             )
             .await
             .unwrap();
 
-        sched.start().await.unwrap();
+        scheduler.start().await.unwrap();
     }
+}
 
-    fn send_to_hosts(&self) {
-        println!("sending to hosts");
+struct DaemonState<L, C> {
+    mailroom: Mutex<Mailroom<MockArchive>>,
+    line: L,
+    config: C,
+}
+
+impl<L, C> DaemonState<L, C>
+where
+    L: GetLine + Sync + Send + 'static,
+    C: GetConfig + Sync + Send + 'static,
+{
+    fn new(line: L, config: C) -> Self {
+        Self {
+            mailroom: Mutex::new(Mailroom::new(MockArchive::new())),
+            line,
+            config,
+        }
     }
 }
