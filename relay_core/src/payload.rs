@@ -105,6 +105,7 @@ impl<'a> UntrustedPayload<'a> {
 struct UnverifiedEnvelope<'a> {
     forwarded: Vec<String>,
     ttl: u8,
+    #[serde(rename(deserialize = "message"))]
     #[serde(borrow)]
     unverified_message: UnverifiedMessage<'a>,
 }
