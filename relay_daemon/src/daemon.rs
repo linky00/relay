@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use relay_core::mailroom::Mailroom;
 use tokio_cron_scheduler::{Job, JobScheduler};

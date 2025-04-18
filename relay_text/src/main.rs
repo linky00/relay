@@ -28,7 +28,7 @@ struct RepeatingLine;
 
 impl GetLine for RepeatingLine {
     fn get() -> String {
-        "blah".into()
+        "blah".to_owned()
     }
 }
 
