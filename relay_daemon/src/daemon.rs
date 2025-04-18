@@ -1,6 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
-use relay_core::mailroom::{Archive, Mailroom};
+use relay_core::{
+    mailroom::{Archive, Mailroom},
+    message::{Envelope, Message},
+};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::config::ReadConfig;
@@ -45,15 +48,11 @@ impl<C: ReadConfig + Sync + Send + 'static> RelayDaemon<C> {
 pub struct DBArchive;
 
 impl Archive for DBArchive {
-    fn add_envelope_to_archive(
-        &mut self,
-        from: &relay_core::message::RelayID,
-        envelope: &relay_core::message::Envelope,
-    ) {
+    fn add_envelope_to_archive(&mut self, from: &str, envelope: &Envelope) {
         todo!()
     }
 
-    fn is_message_in_archive(&self, message: &relay_core::message::Message) -> bool {
+    fn is_message_in_archive(&self, message: &Message) -> bool {
         todo!()
     }
 }
@@ -61,6 +60,6 @@ impl Archive for DBArchive {
 enum LineOutput {
     Single(String),
     Loop { poem: Vec<String>, next_idx: usize },
-    Once { poem: Vec<String>, next_idx: usize },
+    Once(Vec<String>),
     None,
 }
