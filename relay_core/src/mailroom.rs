@@ -4,9 +4,9 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use thiserror::Error;
 
 use crate::{
-    crypto::{PublicKey, SecretKey},
-    message::{Envelope, Message, RelayID},
-    payload::VerifiedPayload,
+    crypto::{PublicKey, SecretKey, get_canon_json_bytes},
+    message::{Certificate, Envelope, Message, MessageContents},
+    payload::TrustedPayload,
 };
 
 const DEFAULT_INITIAL_TTL: u8 = 8;
@@ -68,14 +68,14 @@ impl<A: Archive> Mailroom<A> {
         }
     }
 
-    pub fn receive_payload(&mut self, payload: VerifiedPayload) -> Result<(), ReceivePayloadError> {
+    pub fn receive_payload(&mut self, payload: TrustedPayload) -> Result<(), ReceivePayloadError> {
         self.receive_payload_internal(payload, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
     pub fn receive_payload_at_time(
         &mut self,
-        payload: VerifiedPayload,
+        payload: TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), ReceivePayloadError> {
         self.receive_payload_internal(payload, now)
@@ -83,7 +83,7 @@ impl<A: Archive> Mailroom<A> {
 
     fn receive_payload_internal(
         &mut self,
-        payload: VerifiedPayload,
+        payload: TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), ReceivePayloadError> {
         self.handle_time(now);
@@ -99,7 +99,7 @@ impl<A: Archive> Mailroom<A> {
 
         for envelope in payload.envelopes {
             self.archive
-                .add_envelope_to_archive(&payload.from, &envelope);
+                .add_envelope_to_archive(&payload.certificate.key, &envelope);
 
             if self.new_messages.contains(&envelope.message) {
                 forwarding_from_this_key.push(envelope);
@@ -115,7 +115,7 @@ impl<A: Archive> Mailroom<A> {
         Ok(())
     }
 
-    pub fn get_outgoing<S: AsRef<str>>(
+    pub fn get_outgoing<S: Into<String>>(
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
@@ -125,7 +125,7 @@ impl<A: Archive> Mailroom<A> {
     }
 
     #[cfg(feature = "chrono")]
-    pub fn get_outgoing_at_time<S: AsRef<str>>(
+    pub fn get_outgoing_at_time<S: Into<String>>(
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
@@ -135,7 +135,7 @@ impl<A: Archive> Mailroom<A> {
         self.get_outgoing_internal(sending_to, line, outgoing_config, now)
     }
 
-    fn get_outgoing_internal<S: AsRef<str>>(
+    fn get_outgoing_internal<S: Into<String>>(
         &mut self,
         sending_to: &PublicKey,
         line: Option<S>,
@@ -163,16 +163,40 @@ impl<A: Archive> Mailroom<A> {
             .collect();
 
         if let Some(line) = line {
-            sending_envelopes.push(Envelope {
+            let contents = MessageContents {
+                uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
+                author: outgoing_config.author.clone(),
+                line: line.into(),
+            };
+
+            let contents_json = serde_json::to_string(&contents)
+                .expect("should be able to serialize any message contents to json");
+
+            let contents_bytes = get_canon_json_bytes(&contents_json)
+                .expect("should be able to get canon bytes for any json string");
+
+            let signature = outgoing_config.secret_key.clone().sign(&contents_bytes);
+
+            let envelope = Envelope {
                 forwarded: vec![],
                 ttl: outgoing_config.ttl_config.initial_ttl,
-                message: Message::new(line.as_ref().into(), outgoing_config.relay_id.clone()),
-            });
+                message: Message {
+                    certificate: Certificate {
+                        key: outgoing_config.secret_key.public_key().to_string(),
+                        signature,
+                    },
+                    contents,
+                },
+            };
+
+            self.archive
+                .add_envelope_to_archive(&envelope.message.certificate.key, &envelope);
+
+            sending_envelopes.push(envelope);
         }
 
         OutgoingEnvelopes {
             envelopes: sending_envelopes,
-            relay_id: outgoing_config.relay_id.clone(),
             secret_key: outgoing_config.secret_key.clone(),
         }
     }
@@ -198,25 +222,19 @@ impl<A: Archive> Mailroom<A> {
 
 pub struct OutgoingEnvelopes {
     pub envelopes: Vec<Envelope>,
-    pub(crate) relay_id: RelayID,
     pub(crate) secret_key: SecretKey,
 }
 
 pub struct OutgoingConfig {
-    pub(crate) relay_id: RelayID,
+    pub(crate) author: String,
     pub(crate) secret_key: SecretKey,
     pub(crate) ttl_config: TTLConfig,
 }
 
 impl OutgoingConfig {
-    pub fn new<S: AsRef<str>>(name: S, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
-        let relay_id = RelayID {
-            key: secret_key.public_key().to_string(),
-            name: name.as_ref().into(),
-        };
-
+    pub fn new<S: Into<String>>(author: S, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
         Self {
-            relay_id,
+            author: author.into(),
             secret_key,
             ttl_config,
         }
@@ -240,5 +258,5 @@ impl TTLConfig {
 pub trait Archive {
     fn is_message_in_archive(&self, message: &Message) -> bool;
 
-    fn add_envelope_to_archive(&mut self, from: &RelayID, envelope: &Envelope);
+    fn add_envelope_to_archive(&mut self, from: &str, envelope: &Envelope);
 }

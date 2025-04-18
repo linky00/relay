@@ -1,6 +1,9 @@
+use std::str::FromStr;
+
 use anyhow::Result;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey, ed25519::signature::SignerMut};
+use json_syntax::{Print, Value};
 use rand::rngs::OsRng;
 use thiserror::Error;
 
@@ -80,8 +83,8 @@ impl SecretKey {
         PublicKey(self.0.verifying_key())
     }
 
-    pub(crate) fn sign(&mut self, message: &[u8]) -> Result<String> {
-        Ok(b64_from_bytes(&self.0.try_sign(message)?.to_bytes()))
+    pub(crate) fn sign(&mut self, message: &[u8]) -> String {
+        b64_from_bytes(&self.0.sign(message).to_bytes())
     }
 }
 
@@ -97,4 +100,12 @@ fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N
 
 fn b64_from_bytes(bytes: &[u8]) -> String {
     BASE64_STANDARD.encode(bytes)
+}
+
+pub(crate) fn get_canon_json_bytes(json_string: &str) -> Result<Vec<u8>> {
+    let mut value = Value::from_str(json_string)?;
+
+    value.canonicalize();
+
+    Ok(value.compact_print().to_string().as_bytes().into())
 }

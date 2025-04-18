@@ -5,7 +5,7 @@ use relay_core::{
     crypto::{PublicKey, SecretKey},
     mailroom::{Archive, Mailroom, OutgoingConfig, TTLConfig},
     message::{Envelope, Message},
-    payload::UnverifiedPayload,
+    payload::UntrustedPayload,
 };
 
 pub struct MockRelay {
@@ -13,6 +13,7 @@ pub struct MockRelay {
     mailroom: Mailroom<MockArchive>,
     outgoing_config: OutgoingConfig,
     trusted_keys: HashSet<PublicKey>,
+    #[allow(dead_code)]
     envelopes: Rc<RefCell<Vec<Envelope>>>,
     messages: Rc<RefCell<HashSet<Message>>>,
 }
@@ -30,7 +31,7 @@ impl MockRelay {
                 envelopes: Rc::clone(&envelopes),
                 messages: Rc::clone(&messages),
             }),
-            outgoing_config: OutgoingConfig::new(name, secret_key, TTLConfig::default()),
+            outgoing_config: OutgoingConfig::new(name.as_ref(), secret_key, TTLConfig::default()),
             trusted_keys: HashSet::new(),
             envelopes,
             messages,
@@ -42,9 +43,9 @@ impl MockRelay {
     }
 
     pub fn receive_payload<S: AsRef<str>>(&mut self, payload: S, now: DateTime<Utc>) {
-        let unverified_payload = UnverifiedPayload::from_json(payload.as_ref()).unwrap();
+        let unverified_payload = UntrustedPayload::from_json(payload.as_ref()).unwrap();
         let verified_payload = unverified_payload
-            .verify(self.trusted_keys.clone())
+            .try_trust(self.trusted_keys.clone())
             .unwrap();
         self.mailroom
             .receive_payload_at_time(verified_payload, now)
@@ -57,17 +58,20 @@ impl MockRelay {
         line: S,
         now: DateTime<Utc>,
     ) -> String {
-        let outgoing_envelopes =
-            self.mailroom
-                .get_outgoing_at_time(&for_key, Some(line), &self.outgoing_config, now);
-        outgoing_envelopes.create_payload().unwrap()
+        let outgoing_envelopes = self.mailroom.get_outgoing_at_time(
+            &for_key,
+            Some(line.as_ref()),
+            &self.outgoing_config,
+            now,
+        );
+        outgoing_envelopes.create_payload()
     }
 
     pub fn has_message_with_line<S: AsRef<str>>(&self, line: S) -> bool {
         self.messages
             .borrow()
             .iter()
-            .any(|message| message.line == line.as_ref())
+            .any(|message| message.contents.line == line.as_ref())
     }
 }
 
@@ -77,7 +81,7 @@ struct MockArchive {
 }
 
 impl Archive for MockArchive {
-    fn add_envelope_to_archive(&mut self, _: &relay_core::message::RelayID, envelope: &Envelope) {
+    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) {
         self.envelopes.borrow_mut().push(envelope.clone());
         self.messages.borrow_mut().insert(envelope.message.clone());
     }

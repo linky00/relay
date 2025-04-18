@@ -1,150 +1,182 @@
-use std::str::FromStr;
-
 use anyhow::Result;
-use json_syntax::{Print, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use thiserror::Error;
 
 use crate::{
-    crypto::PublicKey,
+    crypto::{PublicKey, get_canon_json_bytes},
     mailroom::OutgoingEnvelopes,
-    message::{Envelope, RelayID},
+    message::{Certificate, Envelope, Message},
 };
 
 #[derive(Error, Debug)]
-pub enum VerifyPayloadError {
-    #[error("public key is malformed")]
+pub enum UntrustedPayloadError {
+    #[error("public key in certificate of payload or message is malformed")]
     MalformedPublicKey,
-    #[error("public key is not trusted")]
+    #[error("public key in certificate of payload is not trusted")]
     PublicKeyNotTrusted,
     #[error("cannot parse json")]
     CannotParseJson,
-    #[error("cannot verify message with given public key and signature")]
-    CannotVerifyMessage,
-}
-
-#[derive(Error, Debug)]
-pub enum UnverifiedPayloadError {
-    #[error("cannot deserialize json payload")]
-    CannotDeserializeJson,
+    #[error("cannot verify payload certificate")]
+    CannotVerify,
 }
 
 #[derive(Deserialize)]
-pub struct UnverifiedPayload<'a> {
-    from: RelayID,
-    signature: String,
+pub struct UntrustedPayload<'a> {
+    certificate: Certificate,
     #[serde(rename(deserialize = "envelopes"))]
     #[serde(borrow)]
     envelopes_raw_value: &'a RawValue,
 }
 
-impl<'a> UnverifiedPayload<'a> {
-    pub fn from_json(json_str: &'a str) -> Result<Self, UnverifiedPayloadError> {
-        serde_json::from_str(json_str).map_err(|_| UnverifiedPayloadError::CannotDeserializeJson)
+impl<'a> UntrustedPayload<'a> {
+    pub fn from_json(json_str: &'a str) -> Result<Self, UntrustedPayloadError> {
+        serde_json::from_str(json_str).map_err(|_| UntrustedPayloadError::CannotParseJson)
     }
 
-    pub fn verify<I>(self, trusted_public_keys: I) -> Result<VerifiedPayload, VerifyPayloadError>
+    pub fn try_trust<I>(
+        self,
+        trusted_public_keys: I,
+    ) -> Result<TrustedPayload, UntrustedPayloadError>
     where
         I: IntoIterator<Item = PublicKey>,
     {
-        let claimed_public_key = match PublicKey::new_from_b64(&self.from.key) {
+        let claimed_public_key = match PublicKey::new_from_b64(&self.certificate.key) {
             Ok(public_key) => public_key,
-            Err(_) => return Err(VerifyPayloadError::MalformedPublicKey),
+            Err(_) => return Err(UntrustedPayloadError::MalformedPublicKey),
         };
 
         if !trusted_public_keys
             .into_iter()
             .any(|key| key == claimed_public_key)
         {
-            return Err(VerifyPayloadError::PublicKeyNotTrusted);
+            return Err(UntrustedPayloadError::PublicKeyNotTrusted);
         }
 
-        let envelope_bytes = match get_canon_json_bytes(self.envelopes_raw_value.get()) {
-            Ok(envelope_bytes) => envelope_bytes,
-            Err(_) => return Err(VerifyPayloadError::CannotParseJson),
-        };
+        check_signature(
+            &self.certificate.signature,
+            claimed_public_key,
+            &self.envelopes_raw_value,
+        )?;
 
-        if let Err(_) = claimed_public_key.verify(envelope_bytes, &self.signature) {
-            return Err(VerifyPayloadError::CannotVerifyMessage);
+        let unverified_envelopes: Vec<UnverifiedEnvelope> =
+            serde_json::from_str(self.envelopes_raw_value.get())
+                .map_err(|_| UntrustedPayloadError::CannotParseJson)?;
+
+        let mut envelopes = vec![];
+        let mut unverified_messages_count = 0;
+
+        for unverified_envelope in unverified_envelopes {
+            match check_signature(
+                &unverified_envelope.unverified_message.certificate.signature,
+                PublicKey::new_from_b64(&unverified_envelope.unverified_message.certificate.key)
+                    .map_err(|_| UntrustedPayloadError::MalformedPublicKey)?,
+                unverified_envelope.unverified_message.contents_raw_json,
+            ) {
+                Ok(_) => envelopes.push(Envelope {
+                    forwarded: unverified_envelope.forwarded,
+                    ttl: unverified_envelope.ttl,
+                    message: Message {
+                        certificate: unverified_envelope.unverified_message.certificate,
+                        contents: serde_json::from_str(
+                            unverified_envelope
+                                .unverified_message
+                                .contents_raw_json
+                                .get(),
+                        )
+                        .map_err(|_| UntrustedPayloadError::CannotParseJson)?,
+                    },
+                }),
+                Err(UntrustedPayloadError::CannotVerify) => unverified_messages_count += 1,
+                Err(e) => return Err(e),
+            }
         }
 
-        let verified_envelopes =
-            match serde_json::from_str::<Vec<Envelope>>(self.envelopes_raw_value.get()) {
-                Ok(envelope_vec) => envelope_vec,
-                Err(_) => return Err(VerifyPayloadError::CannotParseJson),
-            };
-
-        Ok(VerifiedPayload {
-            from: self.from,
+        Ok(TrustedPayload {
             public_key: claimed_public_key,
-            envelopes: verified_envelopes,
+            certificate: self.certificate,
+            envelopes,
+            unverified_messages_count,
         })
     }
 }
 
-pub struct VerifiedPayload {
-    pub(crate) public_key: PublicKey,
-    pub(crate) from: RelayID,
-    pub(crate) envelopes: Vec<Envelope>,
+#[derive(Deserialize)]
+struct UnverifiedEnvelope<'a> {
+    forwarded: Vec<String>,
+    ttl: u8,
+    #[serde(borrow)]
+    unverified_message: UnverifiedMessage<'a>,
 }
 
-impl VerifiedPayload {
-    pub fn from(&self) -> &RelayID {
-        &self.from
+#[derive(Deserialize)]
+struct UnverifiedMessage<'a> {
+    certificate: Certificate,
+    #[serde(rename(deserialize = "contents"))]
+    #[serde(borrow)]
+    contents_raw_json: &'a RawValue,
+}
+
+pub struct TrustedPayload {
+    pub(crate) public_key: PublicKey,
+    pub(crate) certificate: Certificate,
+    pub(crate) envelopes: Vec<Envelope>,
+    pub(crate) unverified_messages_count: u32,
+}
+
+impl TrustedPayload {
+    pub fn certificate(&self) -> &Certificate {
+        &self.certificate
     }
 
     pub fn envelopes(&self) -> &Vec<Envelope> {
         &self.envelopes
     }
-}
 
-#[derive(Error, Debug)]
-pub enum CreatePayloadError {
-    #[error("cannot serialize into json for some reason")]
-    CannotSerializeJson,
-    #[error("cannot sign json for some reason")]
-    CannotSignJson,
+    pub fn unverified_messages_count(&self) -> u32 {
+        self.unverified_messages_count
+    }
 }
 
 impl OutgoingEnvelopes {
-    pub fn create_payload(&self) -> Result<String, CreatePayloadError> {
+    pub fn create_payload(&self) -> String {
         let envelopes_json = serde_json::to_string(&self.envelopes)
-            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
+            .expect("should be able to serialize any envelopes to json");
 
         let envelopes_bytes = get_canon_json_bytes(&envelopes_json)
-            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
+            .expect("should be able to get canon bytes for any json string");
 
-        let signature = self
-            .secret_key
-            .clone()
-            .sign(&envelopes_bytes)
-            .map_err(|_| CreatePayloadError::CannotSignJson)?;
+        let signature = self.secret_key.clone().sign(&envelopes_bytes);
 
         let outgoing_payload = OutgoingPayload {
-            from: &self.relay_id,
-            signature: signature,
+            certificate: Certificate {
+                key: self.secret_key.public_key().to_string(),
+                signature,
+            },
             envelopes: &self.envelopes,
         };
 
-        let payload_json = serde_json::to_string(&outgoing_payload)
-            .map_err(|_| CreatePayloadError::CannotSerializeJson)?;
-
-        Ok(payload_json)
+        serde_json::to_string(&outgoing_payload)
+            .expect("should be able to serialize any payload to json")
     }
 }
 
 #[derive(Serialize)]
 struct OutgoingPayload<'a> {
-    from: &'a RelayID,
-    signature: String,
+    certificate: Certificate,
     envelopes: &'a Vec<Envelope>,
 }
 
-fn get_canon_json_bytes(json_string: &str) -> Result<Vec<u8>> {
-    let mut value = Value::from_str(json_string)?;
+fn check_signature(
+    signature: &str,
+    key: PublicKey,
+    raw_value: &RawValue,
+) -> Result<(), UntrustedPayloadError> {
+    let bytes = get_canon_json_bytes(raw_value.get())
+        .map_err(|_| UntrustedPayloadError::CannotParseJson)?;
 
-    value.canonicalize();
+    key.verify(bytes, signature)
+        .map_err(|_| UntrustedPayloadError::CannotVerify)?;
 
-    Ok(value.compact_print().to_string().as_bytes().into())
+    Ok(())
 }
