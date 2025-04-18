@@ -1,8 +1,9 @@
 use std::{collections::HashSet, sync::Arc};
 
 use relay_daemon::{
-    config::{Config, ReadConfig},
+    config::{Config, GetConfig},
     daemon::RelayDaemon,
+    line::GetLine,
 };
 
 #[tokio::main]
@@ -15,18 +16,26 @@ async fn main() {
         max_forwarding_ttl: None,
     });
 
-    let relay_daemon = Arc::new(RelayDaemon::new_fast(text_config));
-    relay_daemon.start().await;
+    let relay_daemon = Arc::new(RelayDaemon::new(RepeatingLine, text_config).fast());
+    relay_daemon.start_sending_to_hosts().await;
 
     tokio::signal::ctrl_c()
         .await
         .expect("should be able to wait on ctrl+c");
 }
 
+struct RepeatingLine;
+
+impl GetLine for RepeatingLine {
+    fn get() -> String {
+        "blah".into()
+    }
+}
+
 struct TextConfig(Config);
 
-impl ReadConfig for TextConfig {
-    fn read(&self) -> Option<&Config> {
+impl GetConfig for TextConfig {
+    fn get(&self) -> Option<&Config> {
         Some(&self.0)
     }
 }

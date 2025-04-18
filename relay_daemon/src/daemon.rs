@@ -1,37 +1,39 @@
 use std::{sync::Arc, time::Duration};
 
-use relay_core::{
-    mailroom::{Archive, Mailroom},
-    message::{Envelope, Message},
-};
+use relay_core::mailroom::Mailroom;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::config::ReadConfig;
+use crate::{archive::MockArchive, config::GetConfig, line::GetLine};
 
-pub struct RelayDaemon<C: ReadConfig> {
-    mailroom: Mailroom<DBArchive>,
+pub struct RelayDaemon<C: GetConfig, L: GetLine> {
+    mailroom: Mailroom<MockArchive>,
     config: C,
-    line_output: LineOutput,
+    line: L,
     fast_mode: bool,
 }
 
-impl<C: ReadConfig + Sync + Send + 'static> RelayDaemon<C> {
-    pub fn new(config: C) -> Self {
+impl<C, L> RelayDaemon<C, L>
+where
+    L: GetLine + Sync + Send + 'static,
+    C: GetConfig + Sync + Send + 'static,
+{
+    pub fn new(line: L, config: C) -> Self {
         Self {
-            mailroom: Mailroom::new(DBArchive),
+            mailroom: Mailroom::new(MockArchive::new()),
             config,
-            line_output: LineOutput::None,
+            line,
             fast_mode: false,
         }
     }
 
-    pub fn new_fast(config: C) -> Self {
-        let mut new = Self::new(config);
-        new.fast_mode = true;
-        new
+    pub fn fast(self) -> Self {
+        Self {
+            fast_mode: true,
+            ..self
+        }
     }
 
-    pub async fn start(self: &Arc<Self>) {
+    pub async fn start_sending_to_hosts(self: &Arc<Self>) {
         let sched = JobScheduler::new().await.unwrap();
 
         let send_to_hosts_schedule = match self.fast_mode {
@@ -55,23 +57,4 @@ impl<C: ReadConfig + Sync + Send + 'static> RelayDaemon<C> {
     fn send_to_hosts(&self) {
         println!("sending to hosts");
     }
-}
-
-pub struct DBArchive;
-
-impl Archive for DBArchive {
-    fn add_envelope_to_archive(&mut self, from: &str, envelope: &Envelope) {
-        todo!()
-    }
-
-    fn is_message_in_archive(&self, message: &Message) -> bool {
-        todo!()
-    }
-}
-
-enum LineOutput {
-    Single(String),
-    Loop { poem: Vec<String>, next_idx: usize },
-    Once(Vec<String>),
-    None,
 }

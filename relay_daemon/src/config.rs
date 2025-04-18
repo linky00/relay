@@ -8,6 +8,6 @@ pub struct Config {
     pub max_forwarding_ttl: Option<u8>,
 }
 
-pub trait ReadConfig {
-    fn read(&self) -> Option<&Config>;
+pub trait GetConfig {
+    fn get(&self) -> Option<&Config>;
 }
