@@ -6,9 +6,8 @@ pub struct Config {
     pub contacting_hosts: HashSet<String>,
     pub initial_ttl: Option<u8>,
     pub max_forwarding_ttl: Option<u8>,
-    pub fast_mode: bool,
 }
 
 pub trait ReadConfig {
-    fn read(&self) -> &Config;
+    fn read(&self) -> Option<&Config>;
 }

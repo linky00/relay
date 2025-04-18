@@ -13,19 +13,20 @@ async fn main() {
         contacting_hosts: HashSet::new(),
         initial_ttl: None,
         max_forwarding_ttl: None,
-        fast_mode: true,
     });
 
-    let relay_daemon = Arc::new(RelayDaemon::new(text_config));
+    let relay_daemon = Arc::new(RelayDaemon::new_fast(text_config));
     relay_daemon.start().await;
 
-    std::future::pending::<()>().await;
+    tokio::signal::ctrl_c()
+        .await
+        .expect("should be able to wait on ctrl+c");
 }
 
 struct TextConfig(Config);
 
 impl ReadConfig for TextConfig {
-    fn read(&self) -> &Config {
-        &self.0
+    fn read(&self) -> Option<&Config> {
+        Some(&self.0)
     }
 }

@@ -12,6 +12,7 @@ pub struct RelayDaemon<C: ReadConfig> {
     mailroom: Mailroom<DBArchive>,
     config: C,
     line_output: LineOutput,
+    fast_mode: bool,
 }
 
 impl<C: ReadConfig + Sync + Send + 'static> RelayDaemon<C> {
@@ -20,16 +21,27 @@ impl<C: ReadConfig + Sync + Send + 'static> RelayDaemon<C> {
             mailroom: Mailroom::new(DBArchive),
             config,
             line_output: LineOutput::None,
+            fast_mode: false,
         }
     }
 
-    pub async fn start(self: Arc<Self>) {
+    pub fn new_fast(config: C) -> Self {
+        let mut new = Self::new(config);
+        new.fast_mode = true;
+        new
+    }
+
+    pub async fn start(self: &Arc<Self>) {
         let sched = JobScheduler::new().await.unwrap();
 
+        let send_to_hosts_schedule = match self.fast_mode {
+            true => "* * * * * *",
+            false => "0 * * * *",
+        };
         let self_clone = self.clone();
         sched
             .add(
-                Job::new("* * * * * *", move |_, _| {
+                Job::new(send_to_hosts_schedule, move |_, _| {
                     self_clone.send_to_hosts();
                 })
                 .unwrap(),
