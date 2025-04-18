@@ -1,3 +1,3 @@
 pub trait GetLine {
-    fn get() -> String;
+    fn get() -> Option<String>;
 }

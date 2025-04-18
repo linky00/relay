@@ -27,8 +27,8 @@ async fn main() {
 struct RepeatingLine;
 
 impl GetLine for RepeatingLine {
-    fn get() -> String {
-        "blah".to_owned()
+    fn get() -> Option<String> {
+        Some("blah".to_owned())
     }
 }
 
