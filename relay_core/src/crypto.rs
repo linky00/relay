@@ -32,7 +32,7 @@ impl PublicKey {
     }
 
     pub fn new_from_bytes(bytes: &[u8; PUBLIC_KEY_LENGTH]) -> Result<Self, NewKeyError> {
-        match VerifyingKey::from_bytes(&bytes) {
+        match VerifyingKey::from_bytes(bytes) {
             Ok(verifying_key) => Ok(Self(verifying_key)),
             Err(_) => Err(NewKeyError::InvalidKey),
         }

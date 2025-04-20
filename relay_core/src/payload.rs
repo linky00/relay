@@ -56,7 +56,7 @@ impl<'a> UntrustedPayload<'a> {
         check_signature(
             &self.certificate.signature,
             claimed_public_key,
-            &self.envelopes_raw_value,
+            self.envelopes_raw_value,
         )?;
 
         let unverified_envelopes: Vec<UnverifiedEnvelope> =

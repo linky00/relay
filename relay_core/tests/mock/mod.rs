@@ -43,7 +43,7 @@ impl MockRelay {
     }
 
     pub fn receive_payload(&mut self, payload: &str, now: DateTime<Utc>) {
-        let unverified_payload = UntrustedPayload::from_json(payload.as_ref()).unwrap();
+        let unverified_payload = UntrustedPayload::from_json(payload).unwrap();
         let verified_payload = unverified_payload
             .try_trust(self.trusted_keys.clone())
             .unwrap();
