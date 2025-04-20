@@ -11,7 +11,7 @@ async fn main() {
     let text_config = TextConfig(Config {
         name: "blah".to_owned(),
         trusted_keys: HashSet::new(),
-        contacting_hosts: HashSet::from(["example.com".into()]),
+        contacting_urls: HashSet::from(["example.com".into()]),
         initial_ttl: None,
         max_forwarding_ttl: None,
     });
