@@ -24,7 +24,7 @@ pub enum NewKeyError {
 pub struct PublicKey(VerifyingKey);
 
 impl PublicKey {
-    pub fn new_from_b64<S: AsRef<str>>(b64_string: S) -> Result<Self, NewKeyError> {
+    pub fn new_from_b64(b64_string: &str) -> Result<Self, NewKeyError> {
         match bytes_from_b64(b64_string) {
             Ok(bytes) => Self::new_from_bytes(&bytes),
             Err(e) => Err(e),
@@ -46,7 +46,7 @@ impl PublicKey {
         b64_from_bytes(self.as_bytes())
     }
 
-    pub(crate) fn verify<S: AsRef<str>>(&self, message: Vec<u8>, signature: S) -> Result<()> {
+    pub(crate) fn verify(&self, message: Vec<u8>, signature: &str) -> Result<()> {
         let signature_bytes = bytes_from_b64(signature)?;
         let signature = Signature::from_bytes(&signature_bytes);
         self.0.verify_strict(&message, &signature)?;
@@ -63,7 +63,7 @@ impl SecretKey {
         Self(SigningKey::generate(&mut OsRng))
     }
 
-    pub fn new_from_b64<S: AsRef<str>>(b64_string: S) -> Result<Self, NewKeyError> {
+    pub fn new_from_b64(b64_string: &str) -> Result<Self, NewKeyError> {
         bytes_from_b64(b64_string).map(|bytes| Self::new_from_bytes(&bytes))
     }
 
@@ -88,8 +88,8 @@ impl SecretKey {
     }
 }
 
-fn bytes_from_b64<S: AsRef<str>, const N: usize>(b64_string: S) -> Result<[u8; N], NewKeyError> {
-    match BASE64_STANDARD.decode(b64_string.as_ref()) {
+fn bytes_from_b64<const N: usize>(b64_string: &str) -> Result<[u8; N], NewKeyError> {
+    match BASE64_STANDARD.decode(b64_string) {
         Ok(bytes_vec) => match bytes_vec.try_into() {
             Ok(bytes_array) => Ok(bytes_array),
             Err(_) => Err(NewKeyError::IncorrectLength),

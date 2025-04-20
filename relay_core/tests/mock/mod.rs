@@ -19,7 +19,7 @@ pub struct MockRelay {
 }
 
 impl MockRelay {
-    pub fn new<S: AsRef<str>>(name: S) -> Self {
+    pub fn new(name: &str) -> Self {
         let secret_key = SecretKey::generate();
 
         let envelopes = Rc::new(RefCell::new(vec![]));
@@ -31,7 +31,7 @@ impl MockRelay {
                 envelopes: Rc::clone(&envelopes),
                 messages: Rc::clone(&messages),
             }),
-            outgoing_config: OutgoingConfig::new(name.as_ref(), secret_key, TTLConfig::default()),
+            outgoing_config: OutgoingConfig::new(name, secret_key, TTLConfig::default()),
             trusted_keys: HashSet::new(),
             envelopes,
             messages,
@@ -42,7 +42,7 @@ impl MockRelay {
         self.trusted_keys.insert(key);
     }
 
-    pub fn receive_payload<S: AsRef<str>>(&mut self, payload: S, now: DateTime<Utc>) {
+    pub fn receive_payload(&mut self, payload: &str, now: DateTime<Utc>) {
         let unverified_payload = UntrustedPayload::from_json(payload.as_ref()).unwrap();
         let verified_payload = unverified_payload
             .try_trust(self.trusted_keys.clone())
@@ -52,26 +52,18 @@ impl MockRelay {
             .unwrap();
     }
 
-    pub fn create_payload<S: AsRef<str>>(
-        &mut self,
-        for_key: PublicKey,
-        line: S,
-        now: DateTime<Utc>,
-    ) -> String {
-        let outgoing_envelopes = self.mailroom.get_outgoing_at_time(
-            &for_key,
-            Some(line.as_ref()),
-            &self.outgoing_config,
-            now,
-        );
+    pub fn create_payload(&mut self, for_key: PublicKey, line: &str, now: DateTime<Utc>) -> String {
+        let outgoing_envelopes =
+            self.mailroom
+                .get_outgoing_at_time(&for_key, Some(line), &self.outgoing_config, now);
         outgoing_envelopes.create_payload()
     }
 
-    pub fn has_message_with_line<S: AsRef<str>>(&self, line: S) -> bool {
+    pub fn has_message_with_line(&self, line: &str) -> bool {
         self.messages
             .borrow()
             .iter()
-            .any(|message| message.contents.line == line.as_ref())
+            .any(|message| message.contents.line == line)
     }
 }
 
