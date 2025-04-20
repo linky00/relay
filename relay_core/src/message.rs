@@ -20,16 +20,6 @@ pub struct MessageContents {
     pub line: String,
 }
 
-impl MessageContents {
-    // pub(crate) fn new(line: String, author: String) -> Self {
-    //     Self {
-    //         uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
-    //         author,
-    //         line,
-    //     }
-    // }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Certificate {
     pub key: String,
