@@ -242,8 +242,17 @@ impl OutgoingConfig {
 }
 
 pub struct TTLConfig {
-    pub initial_ttl: u8,
-    pub max_forwarding_ttl: u8,
+    initial_ttl: u8,
+    max_forwarding_ttl: u8,
+}
+
+impl TTLConfig {
+    pub fn new(initial_ttl: Option<u8>, max_forwarding_ttl: Option<u8>) -> Self {
+        Self {
+            initial_ttl: initial_ttl.unwrap_or(DEFAULT_INITIAL_TTL),
+            max_forwarding_ttl: max_forwarding_ttl.unwrap_or(DEFAULT_MAX_FORWARDING_TTL),
+        }
+    }
 }
 
 impl Default for TTLConfig {
