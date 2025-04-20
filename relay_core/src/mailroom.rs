@@ -246,9 +246,9 @@ pub struct TTLConfig {
     pub max_forwarding_ttl: u8,
 }
 
-impl TTLConfig {
-    pub fn default() -> TTLConfig {
-        TTLConfig {
+impl Default for TTLConfig {
+    fn default() -> Self {
+        Self {
             initial_ttl: DEFAULT_INITIAL_TTL,
             max_forwarding_ttl: DEFAULT_MAX_FORWARDING_TTL,
         }
