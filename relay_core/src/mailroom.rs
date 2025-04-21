@@ -235,11 +235,13 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
     }
 }
 
+#[derive(Clone)]
 pub struct OutgoingEnvelopes {
     pub envelopes: Vec<Envelope>,
     pub(crate) secret_key: SecretKey,
 }
 
+#[derive(Clone)]
 pub struct OutgoingConfig {
     pub(crate) author: String,
     pub(crate) secret_key: SecretKey,
@@ -256,6 +258,7 @@ impl OutgoingConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct TTLConfig {
     initial_ttl: u8,
     max_forwarding_ttl: u8,
