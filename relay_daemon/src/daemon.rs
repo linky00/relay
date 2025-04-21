@@ -6,7 +6,10 @@ use relay_core::mailroom::{GetNextLine, Mailroom};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::{config::GetConfig, event::HandleEvent};
+use crate::{
+    config::GetConfig,
+    event::{self, HandleEvent},
+};
 
 mod archive;
 mod exchange;
@@ -33,11 +36,10 @@ where
         }
     }
 
-    pub fn fast(self) -> Self {
-        Self {
-            fast_mode: true,
-            ..self
-        }
+    pub fn new_fast(line_generator: L, config_reader: C, event_handler: E) -> Self {
+        let mut daemon = Self::new(line_generator, config_reader, event_handler);
+        daemon.fast_mode = true;
+        daemon
     }
 
     pub async fn start_sending_to_hosts(&self) {

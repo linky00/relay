@@ -26,7 +26,7 @@ async fn main() {
         max_forwarding_ttl: None,
     });
 
-    let relay_daemon = Daemon::new(IncreasingLine::new(), text_config, EventPrinter).fast();
+    let relay_daemon = Daemon::new_fast(IncreasingLine::new(), text_config, EventPrinter);
     relay_daemon.start_sending_to_hosts().await;
 
     tokio::signal::ctrl_c()
