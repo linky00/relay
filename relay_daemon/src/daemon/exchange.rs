@@ -48,7 +48,13 @@ pub async fn send_to_listeners<L, A, E>(
 
                 let outgoing_payload = outgoing_envelopes.create_payload();
 
-                match client.post(endpoint).body(outgoing_payload).send().await {
+                match client
+                    .post(endpoint)
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(outgoing_payload)
+                    .send()
+                    .await
+                {
                     Ok(response) => {
                         event::emit_event(
                             &event_handler,
