@@ -36,7 +36,7 @@ async fn main() {
         text_config,
         EventPrinter,
     );
-    relay_daemon.start().await;
+    relay_daemon.start().await.unwrap();
 
     tokio::signal::ctrl_c()
         .await

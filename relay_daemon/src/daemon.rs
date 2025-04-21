@@ -6,6 +6,7 @@ use relay_core::{
     crypto::SecretKey,
     mailroom::{GetNextLine, Mailroom},
 };
+use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -13,6 +14,14 @@ use crate::{config::GetConfig, event::HandleEvent};
 
 mod archive;
 mod exchange;
+
+#[derive(Error, Debug)]
+pub enum DaemonError {
+    #[error("cannot start sender for some reason")]
+    CannotStartSender,
+    #[error("cannot bind port {0} (is it in use?)")]
+    CannotBindPort(u16),
+}
 
 pub struct Daemon<L: GetNextLine, C, E> {
     state: Arc<DaemonState<L, C, E>>,
@@ -53,8 +62,10 @@ where
         daemon
     }
 
-    pub async fn start(&self) {
-        let scheduler = JobScheduler::new().await.unwrap();
+    pub async fn start(&self) -> Result<(), DaemonError> {
+        let scheduler = JobScheduler::new()
+            .await
+            .map_err(|_| DaemonError::CannotStartSender)?;
 
         let state = Arc::clone(&self.state);
         scheduler
@@ -78,12 +89,17 @@ where
                         })
                     },
                 )
-                .unwrap(),
+                .map_err(|_| DaemonError::CannotStartSender)?,
             )
             .await
-            .unwrap();
+            .map_err(|_| DaemonError::CannotStartSender)?;
 
-        scheduler.start().await.unwrap();
+        scheduler
+            .start()
+            .await
+            .map_err(|_| DaemonError::CannotStartSender)?;
+
+        Ok(())
     }
 }
 
