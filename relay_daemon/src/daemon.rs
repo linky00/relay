@@ -39,7 +39,7 @@ where
         daemon
     }
 
-    pub async fn start_sending_to_hosts(&self) {
+    pub async fn start(&self) {
         let scheduler = JobScheduler::new().await.unwrap();
 
         let state = Arc::clone(&self.state);
