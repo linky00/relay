@@ -1,8 +1,8 @@
-use std::collections::HashSet;
-
+use relay_core::crypto::SecretKey;
 use relay_daemon::{
-    config::{Config, GetConfig},
+    config::{Config, GetConfig, RelayData},
     daemon::Daemon,
+    event::{Event, HandleEvent},
     line::GetLine,
 };
 
@@ -10,13 +10,20 @@ use relay_daemon::{
 async fn main() {
     let text_config = TextConfig(Config {
         name: "blah".to_owned(),
-        trusted_keys: HashSet::new(),
-        contacting_urls: HashSet::from(["example.com".into()]),
+        secret_key: SecretKey::generate(),
+        trusted_relays: vec![
+            RelayData::new(
+                SecretKey::generate().public_key(),
+                Some("https://example.com"),
+                Some("another relay".to_owned()),
+            )
+            .unwrap(),
+        ],
         initial_ttl: None,
         max_forwarding_ttl: None,
     });
 
-    let relay_daemon = Daemon::new(RepeatingLine, text_config).fast();
+    let relay_daemon = Daemon::new(RepeatingLine, text_config, EventPrinter).fast();
     relay_daemon.start_sending_to_hosts().await;
 
     tokio::signal::ctrl_c()
@@ -27,7 +34,7 @@ async fn main() {
 struct RepeatingLine;
 
 impl GetLine for RepeatingLine {
-    fn get(&self) -> Option<String> {
+    fn get(&mut self) -> Option<String> {
         Some("blah".to_owned())
     }
 }
@@ -37,5 +44,48 @@ struct TextConfig(Config);
 impl GetConfig for TextConfig {
     fn get(&self) -> Option<&Config> {
         Some(&self.0)
+    }
+}
+
+struct EventPrinter;
+
+impl EventPrinter {
+    fn relay_display(relay: RelayData) -> String {
+        format!("\"{}\"", relay.nickname.unwrap_or(relay.key.to_string()))
+    }
+}
+
+impl HandleEvent for EventPrinter {
+    fn handle_event(&mut self, event: Event) {
+        match event {
+            Event::SendingToHosts => {
+                println!("sending to hosts");
+            }
+            Event::SentToHost(host, envelopes) => {
+                println!(
+                    "sent host relay {} {} envelopes",
+                    EventPrinter::relay_display(host),
+                    envelopes.len()
+                );
+            }
+            Event::ReceivedFromHost(host, envelopes) => {
+                println!(
+                    "received from host relay {} {} envelopes",
+                    EventPrinter::relay_display(host),
+                    envelopes.len()
+                );
+            }
+            Event::ProblemSendingToHost(host, error) => {
+                println!(
+                    "problem sending to host relay {}: {}",
+                    EventPrinter::relay_display(host),
+                    error
+                )
+            }
+            Event::FinishedSendingToHosts => {
+                println!("finished sending to hosts");
+            }
+            _ => {}
+        }
     }
 }

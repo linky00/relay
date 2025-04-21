@@ -1,4 +1,8 @@
+use std::str::FromStr;
+
 use relay_core::crypto::{PublicKey, SecretKey};
+use reqwest::Url;
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Config {
@@ -15,11 +19,36 @@ impl Config {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum RelayDataError {
+    #[error("url is not valid (is it missing http/https?)")]
+    UrlNotValid,
+}
+
 #[derive(Clone)]
 pub struct RelayData {
     pub key: PublicKey,
-    pub host: Option<String>,
+    pub(crate) host: Option<Url>,
     pub nickname: Option<String>,
+}
+
+impl RelayData {
+    pub fn new(
+        key: PublicKey,
+        host_url: Option<&str>,
+        nickname: Option<String>,
+    ) -> Result<Self, RelayDataError> {
+        let host = match host_url {
+            Some(url_str) => Some(Url::from_str(url_str).map_err(|_| RelayDataError::UrlNotValid)?),
+            None => None,
+        };
+
+        Ok(RelayData {
+            key,
+            host,
+            nickname,
+        })
+    }
 }
 
 pub trait GetConfig {

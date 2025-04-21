@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.98"
+futures = "0.3.31"
 relay_core = { path = "../relay_core" }
 reqwest = "0.12.15"
 sqlx = { version = "0.8.4", features = ["sqlite"] }

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use futures::future;
 use relay_core::{
-    mailroom::{self, Archive, Mailroom, OutgoingConfig, TTLConfig},
+    mailroom::{Archive, Mailroom, OutgoingConfig, TTLConfig},
     payload::UntrustedPayload,
 };
 use reqwest::Client;
@@ -22,11 +23,16 @@ pub async fn send_to_hosts<A, E>(
     A: Archive + Send + 'static,
     E: HandleEvent + Send + 'static,
 {
+    event_handler
+        .lock()
+        .await
+        .handle_event(Event::SendingToHosts);
+
     let client = Client::new();
 
     let outgoing_config = create_outgoing_config(&config);
 
-    let _ = config
+    let handles = config
         .trusted_relays
         .iter()
         .filter_map(|relay| match &relay.host {
@@ -36,7 +42,8 @@ pub async fn send_to_hosts<A, E>(
         .map(async |(relay, host)| {
             let outgoing_envelopes =
                 mailroom
-                    .blocking_lock()
+                    .lock()
+                    .await
                     .get_outgoing(&relay.key, line.clone(), &outgoing_config);
 
             let outgoing_payload = outgoing_envelopes.create_payload();
@@ -56,61 +63,45 @@ pub async fn send_to_hosts<A, E>(
                             outgoing_envelopes.envelopes,
                         ));
 
-                        if response.status().is_success() {
-                            match response.text().await {
-                                Ok(response_text) => {
-                                    match UntrustedPayload::from_json(&response_text) {
-                                        Ok(untrusted_payload) => match untrusted_payload
-                                            .try_trust(config.trusted_public_keys())
-                                        {
-                                            Ok(trusted_payload) => {
-                                                event_handler.handle_event(
-                                                    Event::ReceivedFromHost(
-                                                        relay.clone(),
-                                                        trusted_payload.envelopes().clone(),
-                                                    ),
-                                                );
-
-                                                if mailroom
-                                                    .lock()
-                                                    .await
-                                                    .receive_payload(trusted_payload)
-                                                    .is_err()
-                                                {
-                                                    event_handler.handle_event(
-                                                        Event::AlreadyReceivedFromHost(
-                                                            relay.clone(),
-                                                        ),
-                                                    );
-                                                }
-                                            }
-                                            Err(_) => {
-                                                event_handler.handle_event(
-                                                    Event::BadResponseFromHost(relay.clone()),
-                                                );
-                                            }
-                                        },
-                                        Err(_) => {
-                                            event_handler.handle_event(Event::BadResponseFromHost(
-                                                relay.clone(),
-                                            ));
-                                        }
-                                    }
-                                }
-                                Err(_) => {
-                                    event_handler
-                                        .handle_event(Event::BadResponseFromHost(relay.clone()));
-                                }
+                        let handle_response = async || {
+                            if !response.status().is_success() {
+                                return Err(Event::HttpErrorResponseFromHost(
+                                    relay.clone(),
+                                    format!(
+                                        "{}: {}",
+                                        response.status().as_u16(),
+                                        response.status().canonical_reason().unwrap_or_default()
+                                    ),
+                                ));
                             }
-                        } else {
-                            event_handler.handle_event(Event::HttpErrorResponseFromHost(
-                                relay.clone(),
-                                format!(
-                                    "{}: {}",
-                                    response.status().as_u16(),
-                                    response.status().canonical_reason().unwrap_or_default()
-                                ),
-                            ));
+
+                            let response_text = response
+                                .text()
+                                .await
+                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+
+                            let untrusted_payload = UntrustedPayload::from_json(&response_text)
+                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+
+                            let trusted_payload = untrusted_payload
+                                .try_trust(config.trusted_public_keys())
+                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+
+                            let envelopes = trusted_payload.envelopes().clone();
+
+                            match mailroom.lock().await.receive_payload(trusted_payload) {
+                                Ok(_) => Ok(Event::ReceivedFromHost(relay.clone(), envelopes)),
+                                Err(_) => Ok(Event::AlreadyReceivedFromHost(relay.clone())),
+                            }
+                        };
+
+                        match handle_response().await {
+                            Ok(event) => {
+                                event_handler.handle_event(event);
+                            }
+                            Err(event) => {
+                                event_handler.handle_event(event);
+                            }
                         }
                     }
                     Err(error) => {
@@ -125,6 +116,13 @@ pub async fn send_to_hosts<A, E>(
                 };
             })
         });
+
+    future::join_all(handles).await;
+
+    event_handler
+        .lock()
+        .await
+        .handle_event(Event::FinishedSendingToHosts);
 }
 
 fn create_outgoing_config(config: &Config) -> OutgoingConfig {

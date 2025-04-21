@@ -3,12 +3,14 @@ use relay_core::message::Envelope;
 use crate::config::RelayData;
 
 pub enum Event {
+    SendingToHosts,
     SentToHost(RelayData, Vec<Envelope>),
     ProblemSendingToHost(RelayData, String),
     ReceivedFromHost(RelayData, Vec<Envelope>),
     AlreadyReceivedFromHost(RelayData),
     HttpErrorResponseFromHost(RelayData, String),
     BadResponseFromHost(RelayData),
+    FinishedSendingToHosts,
 }
 
 pub trait HandleEvent {
