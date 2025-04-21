@@ -42,7 +42,7 @@ where
     pub async fn start_sending_to_hosts(&self) {
         let scheduler = JobScheduler::new().await.unwrap();
 
-        let state_clone = self.state.clone();
+        let state = Arc::clone(&self.state);
         scheduler
             .add(
                 Job::new_async(
@@ -51,13 +51,13 @@ where
                         false => "0 * * * *",
                     },
                     move |_, _| {
-                        let state_clone = state_clone.clone();
+                        let state = Arc::clone(&state);
                         Box::pin(async move {
-                            if let Some(config) = state_clone.config_reader.get() {
+                            if let Some(config) = state.config_reader.get() {
                                 exchange::send_to_hosts(
-                                    state_clone.mailroom.clone(),
+                                    Arc::clone(&state.mailroom),
                                     config,
-                                    state_clone.event_handler.clone(),
+                                    Arc::clone(&state.event_handler),
                                 )
                                 .await;
                             }
