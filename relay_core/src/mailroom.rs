@@ -111,15 +111,15 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         let mut forwarding_from_this_key = vec![];
 
         for envelope in payload.envelopes {
-            self.archive
-                .add_envelope_to_archive(&payload.certificate.key, &envelope);
-
             if self.new_messages.contains(&envelope.message) {
-                forwarding_from_this_key.push(envelope);
+                forwarding_from_this_key.push(envelope.clone());
             } else if !self.archive.is_message_in_archive(&envelope.message) {
                 self.new_messages.insert(envelope.message.clone());
-                forwarding_from_this_key.push(envelope);
+                forwarding_from_this_key.push(envelope.clone());
             }
+
+            self.archive
+                .add_envelope_to_archive(&payload.certificate.key, &envelope);
         }
 
         self.forwarding_received_this_hour
@@ -160,7 +160,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             .filter(|(from_key, _)| *from_key != sending_to)
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
-                envelope.ttl -= ttl_config.max_forwarding_ttl.min(envelope.ttl - 1);
+                envelope.ttl = ttl_config.max_forwarding_ttl.min(envelope.ttl - 1);
                 if envelope.ttl > 0 {
                     Some(envelope)
                 } else {

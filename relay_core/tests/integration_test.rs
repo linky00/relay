@@ -135,10 +135,12 @@ fn relay_chain() {
 
     let relay_a_line = relay_a.current_line().unwrap();
 
-    println!("now:");
-    println!("relay a {:#?}", relay_a.messages());
-    println!("relay b {:#?}", relay_b.messages());
-    println!("relay c {:#?}", relay_c.messages());
+    // println!("moving {relay_a_line}");
+
+    // println!("now:");
+    // println!("relay a {:#?}", relay_a.messages());
+    // println!("relay b {:#?}", relay_b.messages());
+    // println!("relay c {:#?}", relay_c.messages());
 
     assert!(relay_a.has_message_with_line(&relay_a_line));
     assert!(relay_b.has_message_with_line(&relay_a_line));
@@ -148,10 +150,10 @@ fn relay_chain() {
     exchange_payloads(&mut relay_a, &mut relay_b, an_hour_later).unwrap();
     exchange_payloads(&mut relay_b, &mut relay_c, an_hour_later).unwrap();
 
-    println!("later:");
-    println!("relay a {:#?}", relay_a.messages());
-    println!("relay b {:#?}", relay_b.messages());
-    println!("relay c {:#?}", relay_c.messages());
+    // println!("later:");
+    // println!("relay a {:#?}", relay_a.messages());
+    // println!("relay b {:#?}", relay_b.messages());
+    // println!("relay c {:#?}", relay_c.messages());
 
     assert!(relay_a.has_message_with_line(&relay_a_line));
     assert!(relay_b.has_message_with_line(&relay_a_line));
