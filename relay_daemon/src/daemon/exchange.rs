@@ -26,15 +26,12 @@ pub async fn send_to_hosts<L, A, E>(
 
     let client = Client::new();
 
-    let outgoing_config = create_outgoing_config(&config);
+    let outgoing_config = create_outgoing_config(config);
 
     let handles: Vec<_> = config
         .trusted_relays
         .iter()
-        .filter_map(|relay| match &relay.host {
-            Some(host) => Some((relay.clone(), host.clone())),
-            None => None,
-        })
+        .filter_map(|relay| relay.host.as_ref().map(|host| (relay.clone(), host.clone())))
         .map(|(relay, host)| {
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);

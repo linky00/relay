@@ -227,7 +227,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             }
         }
 
-        if self.current_line == None {
+        if self.current_line.is_none() {
             self.current_line = self.line_generator.get_next_line();
         }
 
