@@ -1,6 +1,11 @@
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use mock::{MockReceivePayloadError, MockRelay};
-use relay_core::{mailroom::ReceivePayloadError, payload::UntrustedPayloadError};
+use relay_core::{
+    crypto::SecretKey, mailroom::ReceivePayloadError, payload::UntrustedPayloadError,
+};
 
 mod mock;
 
@@ -75,4 +80,35 @@ fn reject_already_received_this_hour() {
             ReceivePayloadError::AlreadyReceivedFromKey
         ))
     ));
+}
+
+#[test]
+fn send_different_line_every_hour() {
+    let mut relay_a = MockRelay::new("a");
+
+    let mut time = Utc::now();
+    let mut lines = vec![];
+
+    for _ in 0..10 {
+        relay_a.create_payload(SecretKey::generate().public_key(), time);
+        lines.push(relay_a.current_line());
+        time += Duration::from_secs(3600);
+    }
+
+    assert!(lines.iter().all_unique())
+}
+
+#[test]
+fn send_same_line_in_same_hour() {
+    let mut relay_a = MockRelay::new("a");
+
+    let now = Utc::now();
+
+    relay_a.create_payload(SecretKey::generate().public_key(), now);
+    let first_line = relay_a.current_line();
+
+    relay_a.create_payload(SecretKey::generate().public_key(), now);
+    let second_line = relay_a.current_line();
+
+    assert_eq!(first_line, second_line);
 }

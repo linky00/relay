@@ -55,7 +55,7 @@ impl MockRelay {
     pub fn receive_payload(
         &mut self,
         payload: &str,
-        now: DateTime<Utc>,
+        at: DateTime<Utc>,
     ) -> Result<(), MockReceivePayloadError> {
         let unverified_payload = UntrustedPayload::from_json(payload)
             .map_err(|e| MockReceivePayloadError::CannotReadPayload(e))?;
@@ -63,15 +63,15 @@ impl MockRelay {
             .try_trust(self.trusted_keys.clone())
             .map_err(|e| MockReceivePayloadError::CannotTrustPayload(e))?;
         self.mailroom
-            .receive_payload_at_time(verified_payload, now)
+            .receive_payload_at_time(verified_payload, at)
             .map_err(|e| MockReceivePayloadError::CannotReceiveInMailroom(e))?;
         Ok(())
     }
 
-    pub fn create_payload(&mut self, for_key: PublicKey, now: DateTime<Utc>) -> String {
+    pub fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
         let outgoing_envelopes =
             self.mailroom
-                .get_outgoing_at_time(&for_key, &self.outgoing_config, now);
+                .get_outgoing_at_time(&for_key, &self.outgoing_config, at);
         outgoing_envelopes.create_payload()
     }
 
