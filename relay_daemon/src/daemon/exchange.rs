@@ -17,7 +17,6 @@ pub async fn send_to_hosts<L, A, E>(
     mailroom: Arc<Mutex<Mailroom<L, A>>>,
     config: &Config,
     event_handler: Arc<Mutex<E>>,
-    fast_mode: bool,
 ) where
     L: GetNextLine + Send + 'static,
     A: Archive + Send + 'static,

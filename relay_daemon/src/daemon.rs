@@ -44,7 +44,6 @@ where
         let scheduler = JobScheduler::new().await.unwrap();
 
         let state_clone = self.state.clone();
-        let fast_mode = self.fast_mode;
         scheduler
             .add(
                 Job::new_async(
@@ -60,7 +59,6 @@ where
                                     state_clone.mailroom.clone(),
                                     config,
                                     state_clone.event_handler.clone(),
-                                    fast_mode,
                                 )
                                 .await;
                             }
