@@ -1,13 +1,14 @@
 use std::{sync::Arc, time::Duration};
 
 use archive::MockArchive;
+use axum::{Router, routing};
 use chrono::{DateTime, Timelike, Utc};
 use relay_core::{
     crypto::SecretKey,
     mailroom::{GetNextLine, Mailroom},
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::{net::TcpListener, sync::Mutex};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{config::GetConfig, event::HandleEvent};
@@ -17,10 +18,12 @@ mod exchange;
 
 #[derive(Error, Debug)]
 pub enum DaemonError {
-    #[error("cannot start sender for some reason")]
-    CannotStartSender,
+    #[error("cannot read config")]
+    CannotReadConfig,
     #[error("cannot bind port {0} (is it in use?)")]
     CannotBindPort(u16),
+    #[error("cannot start sender for some reason")]
+    CannotStartSender,
 }
 
 pub struct Daemon<L: GetNextLine, C, E> {
@@ -63,6 +66,29 @@ where
     }
 
     pub async fn start(&self) -> Result<(), DaemonError> {
+        let config = self
+            .state
+            .config_reader
+            .get()
+            .ok_or(DaemonError::CannotReadConfig)?;
+
+        if let Some(listener_config) = &config.listener_config {
+            let router = Router::new().route("/", routing::post(|| async { "blah" }));
+
+            let port = listener_config.custom_port.unwrap_or(7070);
+            let address = format!("0.0.0.0:{}", port);
+
+            let listener = TcpListener::bind(address)
+                .await
+                .map_err(|_| DaemonError::CannotBindPort(port))?;
+
+            tokio::spawn(async {
+                axum::serve(listener, router)
+                    .await
+                    .expect("should run indefinitely");
+            });
+        }
+
         let scheduler = JobScheduler::new()
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
