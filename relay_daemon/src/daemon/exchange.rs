@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     config::Config,
-    event::{Event, HandleEvent},
+    event::{self, Event, HandleEvent},
 };
 
 pub async fn send_to_hosts<L, A, E>(
@@ -22,10 +22,7 @@ pub async fn send_to_hosts<L, A, E>(
     A: Archive + Send + 'static,
     E: HandleEvent + Send + 'static,
 {
-    event_handler
-        .lock()
-        .await
-        .handle_event(Event::SendingToHosts);
+    event::emit_event(&event_handler, Event::BeginningSendingToHosts).await;
 
     let client = Client::new();
 
@@ -55,12 +52,11 @@ pub async fn send_to_hosts<L, A, E>(
 
                 match client.post(host).body(outgoing_payload).send().await {
                     Ok(response) => {
-                        let mut event_handler = event_handler.lock().await;
-
-                        event_handler.handle_event(Event::SentToHost(
-                            relay.clone(),
-                            outgoing_envelopes.envelopes,
-                        ));
+                        event::emit_event(
+                            &event_handler,
+                            Event::SentToHost(relay.clone(), outgoing_envelopes.envelopes),
+                        )
+                        .await;
 
                         let handle_response = async || {
                             if !response.status().is_success() {
@@ -94,23 +90,23 @@ pub async fn send_to_hosts<L, A, E>(
                             }
                         };
 
-                        match handle_response().await {
-                            Ok(event) => {
-                                event_handler.handle_event(event);
-                            }
-                            Err(event) => {
-                                event_handler.handle_event(event);
+                        {
+                            match handle_response().await {
+                                Ok(event) => {
+                                    event::emit_event(&event_handler, event).await;
+                                }
+                                Err(event) => {
+                                    event::emit_event(&event_handler, event).await;
+                                }
                             }
                         }
                     }
                     Err(error) => {
-                        event_handler
-                            .lock()
-                            .await
-                            .handle_event(Event::ProblemSendingToHost(
-                                relay.clone(),
-                                error.to_string(),
-                            ));
+                        event::emit_event(
+                            &event_handler,
+                            Event::ProblemSendingToHost(relay.clone(), error.to_string()),
+                        )
+                        .await;
                     }
                 };
             }
@@ -119,10 +115,7 @@ pub async fn send_to_hosts<L, A, E>(
 
     future::join_all(handles).await;
 
-    event_handler
-        .lock()
-        .await
-        .handle_event(Event::FinishedSendingToHosts);
+    event::emit_event(&event_handler, Event::FinishedSendingToHosts).await;
 }
 
 fn create_outgoing_config(config: &Config) -> OutgoingConfig {

@@ -72,34 +72,52 @@ impl EventPrinter {
 impl HandleEvent for EventPrinter {
     fn handle_event(&mut self, event: Event) {
         match event {
-            Event::SendingToHosts => {
+            Event::BeginningSendingToHosts => {
                 println!("sending to hosts");
             }
             Event::SentToHost(host, envelopes) => {
                 println!(
                     "sent host relay {} {} envelopes",
-                    EventPrinter::relay_display(host),
+                    Self::relay_display(host),
                     envelopes.len()
                 );
             }
             Event::ReceivedFromHost(host, envelopes) => {
                 println!(
                     "received from host relay {} {} envelopes",
-                    EventPrinter::relay_display(host),
+                    Self::relay_display(host),
                     envelopes.len()
                 );
             }
             Event::ProblemSendingToHost(host, error) => {
                 println!(
                     "problem sending to host relay {}: {}",
-                    EventPrinter::relay_display(host),
+                    Self::relay_display(host),
                     error
+                )
+            }
+            Event::HttpErrorResponseFromHost(host, error) => {
+                println!(
+                    "http error response from host relay {}: {}",
+                    Self::relay_display(host),
+                    error
+                )
+            }
+            Event::BadResponseFromHost(host) => {
+                println!(
+                    "received bad response from host relay {}",
+                    Self::relay_display(host)
+                )
+            }
+            Event::AlreadyReceivedFromHost(host) => {
+                println!(
+                    "already received from host relay {}",
+                    Self::relay_display(host)
                 )
             }
             Event::FinishedSendingToHosts => {
                 println!("finished sending to hosts");
             }
-            _ => {}
         }
     }
 }
