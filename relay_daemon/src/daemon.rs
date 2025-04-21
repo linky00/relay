@@ -6,10 +6,7 @@ use relay_core::mailroom::{GetNextLine, Mailroom};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::{
-    config::GetConfig,
-    event::{self, HandleEvent},
-};
+use crate::{config::GetConfig, event::HandleEvent};
 
 mod archive;
 mod exchange;
