@@ -41,9 +41,8 @@ impl<'a> UntrustedPayload<'a> {
     where
         I: IntoIterator<Item = PublicKey>,
     {
-        let claimed_public_key = match PublicKey::new_from_b64(&self.certificate.key) {
-            Ok(public_key) => public_key,
-            Err(_) => return Err(UntrustedPayloadError::MalformedPublicKey),
+        let Ok(claimed_public_key) = PublicKey::new_from_b64(&self.certificate.key) else {
+            return Err(UntrustedPayloadError::MalformedPublicKey);
         };
 
         if !trusted_public_keys
@@ -73,7 +72,7 @@ impl<'a> UntrustedPayload<'a> {
                     .map_err(|_| UntrustedPayloadError::MalformedPublicKey)?,
                 unverified_envelope.unverified_message.contents_raw_json,
             ) {
-                Ok(_) => envelopes.push(Envelope {
+                Ok(()) => envelopes.push(Envelope {
                     forwarded: unverified_envelope.forwarded,
                     ttl: unverified_envelope.ttl,
                     message: Message {
@@ -176,7 +175,7 @@ fn check_signature(
     let bytes = get_canon_json_bytes(raw_value.get())
         .map_err(|_| UntrustedPayloadError::CannotParseJson)?;
 
-    key.verify(bytes, signature)
+    key.verify(&bytes, signature)
         .map_err(|_| UntrustedPayloadError::CannotVerify)?;
 
     Ok(())

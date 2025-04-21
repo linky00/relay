@@ -31,7 +31,12 @@ pub async fn send_to_hosts<L, A, E>(
     let handles: Vec<_> = config
         .trusted_relays
         .iter()
-        .filter_map(|relay| relay.host.as_ref().map(|host| (relay.clone(), host.clone())))
+        .filter_map(|relay| {
+            relay
+                .host
+                .as_ref()
+                .map(|host| (relay.clone(), host.clone()))
+        })
         .map(|(relay, host)| {
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);
@@ -82,21 +87,13 @@ pub async fn send_to_hosts<L, A, E>(
                             let envelopes = trusted_payload.envelopes().clone();
 
                             match mailroom.lock().await.receive_payload(trusted_payload) {
-                                Ok(_) => Ok(Event::ReceivedFromHost(relay.clone(), envelopes)),
+                                Ok(()) => Ok(Event::ReceivedFromHost(relay.clone(), envelopes)),
                                 Err(_) => Ok(Event::AlreadyReceivedFromHost(relay.clone())),
                             }
                         };
 
-                        {
-                            match handle_response().await {
-                                Ok(event) => {
-                                    event::emit_event(&event_handler, event).await;
-                                }
-                                Err(event) => {
-                                    event::emit_event(&event_handler, event).await;
-                                }
-                            }
-                        }
+                        let event = handle_response().await.unwrap_or_else(|e| e);
+                        event::emit_event(&event_handler, event).await;
                     }
                     Err(error) => {
                         event::emit_event(
@@ -105,7 +102,7 @@ pub async fn send_to_hosts<L, A, E>(
                         )
                         .await;
                     }
-                };
+                }
             }
         })
         .collect();

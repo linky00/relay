@@ -94,26 +94,26 @@ impl HandleEvent for EventPrinter {
                     "problem sending to host relay {}: {}",
                     Self::relay_display(host),
                     error
-                )
+                );
             }
             Event::HttpErrorResponseFromHost(host, error) => {
                 println!(
                     "http error response from host relay {}: {}",
                     Self::relay_display(host),
                     error
-                )
+                );
             }
             Event::BadResponseFromHost(host) => {
                 println!(
                     "received bad response from host relay {}",
                     Self::relay_display(host)
-                )
+                );
             }
             Event::AlreadyReceivedFromHost(host) => {
                 println!(
                     "already received from host relay {}",
                     Self::relay_display(host)
-                )
+                );
             }
             Event::FinishedSendingToHosts => {
                 println!("finished sending to hosts");
