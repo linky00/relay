@@ -23,20 +23,14 @@ fn send_payload(
     to_relay.receive_payload(&payload, at)
 }
 
-#[test]
-fn relay_exchange() {
-    let mut relay_a = MockRelay::new("a");
-    let mut relay_b = MockRelay::new("b");
-
-    mutually_trust(&mut relay_a, &mut relay_b);
-
-    let now = Utc::now();
-
-    send_payload(&mut relay_a, &mut relay_b, now).unwrap();
-    assert!(relay_b.has_message_with_line(&relay_a.current_line().unwrap()));
-
-    send_payload(&mut relay_b, &mut relay_a, now).unwrap();
-    assert!(relay_a.has_message_with_line(&relay_b.current_line().unwrap()));
+fn exchange_payloads(
+    relay_a: &mut MockRelay,
+    relay_b: &mut MockRelay,
+    at: DateTime<Utc>,
+) -> Result<(), MockReceivePayloadError> {
+    send_payload(relay_a, relay_b, at)?;
+    send_payload(relay_b, relay_a, at)?;
+    Ok(())
 }
 
 #[test]
@@ -111,4 +105,45 @@ fn send_same_line_in_same_hour() {
     let second_line = relay_a.current_line();
 
     assert_eq!(first_line, second_line);
+}
+
+#[test]
+fn relay_exchange() {
+    let mut relay_a = MockRelay::new("a");
+    let mut relay_b = MockRelay::new("b");
+
+    mutually_trust(&mut relay_a, &mut relay_b);
+
+    exchange_payloads(&mut relay_a, &mut relay_b, Utc::now()).unwrap();
+
+    assert!(relay_b.has_message_with_line(&relay_a.current_line().unwrap()));
+    assert!(relay_a.has_message_with_line(&relay_b.current_line().unwrap()));
+}
+
+#[test]
+fn relay_chain() {
+    let mut relay_a = MockRelay::new("a");
+    let mut relay_b = MockRelay::new("b");
+    let mut relay_c = MockRelay::new("c");
+
+    mutually_trust(&mut relay_a, &mut relay_b);
+    mutually_trust(&mut relay_b, &mut relay_c);
+
+    let now = Utc::now();
+    exchange_payloads(&mut relay_a, &mut relay_b, now).unwrap();
+    exchange_payloads(&mut relay_b, &mut relay_c, now).unwrap();
+
+    let relay_a_line = relay_a.current_line().unwrap();
+
+    assert!(relay_a.has_message_with_line(&relay_a_line));
+    assert!(relay_b.has_message_with_line(&relay_a_line));
+    assert!(!relay_c.has_message_with_line(&relay_a_line));
+
+    let an_hour_later = now + Duration::from_secs(3600);
+    exchange_payloads(&mut relay_a, &mut relay_b, an_hour_later).unwrap();
+    exchange_payloads(&mut relay_b, &mut relay_c, an_hour_later).unwrap();
+
+    assert!(relay_a.has_message_with_line(&relay_a_line));
+    assert!(relay_b.has_message_with_line(&relay_a_line));
+    assert!(relay_c.has_message_with_line(&relay_a_line));
 }
