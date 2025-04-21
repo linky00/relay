@@ -3,14 +3,14 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use chrono::{DateTime, Utc};
 use relay_core::{
     crypto::{PublicKey, SecretKey},
-    mailroom::{Archive, Mailroom, OutgoingConfig, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, OutgoingConfig, TTLConfig},
     message::{Envelope, Message},
     payload::UntrustedPayload,
 };
 
 pub struct MockRelay {
     pub public_key: PublicKey,
-    mailroom: Mailroom<MockArchive>,
+    mailroom: Mailroom<MockLineGenerator, MockArchive>,
     outgoing_config: OutgoingConfig,
     trusted_keys: HashSet<PublicKey>,
     #[allow(dead_code)]
@@ -19,7 +19,7 @@ pub struct MockRelay {
 }
 
 impl MockRelay {
-    pub fn new(name: &str) -> Self {
+    pub fn new<S: Into<String>>(name: &str, line: S) -> Self {
         let secret_key = SecretKey::generate();
 
         let envelopes = Rc::new(RefCell::new(vec![]));
@@ -27,10 +27,13 @@ impl MockRelay {
 
         MockRelay {
             public_key: secret_key.public_key(),
-            mailroom: Mailroom::new(MockArchive {
-                envelopes: Rc::clone(&envelopes),
-                messages: Rc::clone(&messages),
-            }),
+            mailroom: Mailroom::new(
+                MockLineGenerator { line: line.into() },
+                MockArchive {
+                    envelopes: Rc::clone(&envelopes),
+                    messages: Rc::clone(&messages),
+                },
+            ),
             outgoing_config: OutgoingConfig::new(name, secret_key, TTLConfig::default()),
             trusted_keys: HashSet::new(),
             envelopes,
@@ -52,10 +55,10 @@ impl MockRelay {
             .unwrap();
     }
 
-    pub fn create_payload(&mut self, for_key: PublicKey, line: &str, now: DateTime<Utc>) -> String {
+    pub fn create_payload(&mut self, for_key: PublicKey, now: DateTime<Utc>) -> String {
         let outgoing_envelopes =
             self.mailroom
-                .get_outgoing_at_time(&for_key, Some(line), &self.outgoing_config, now);
+                .get_outgoing_at_time(&for_key, &self.outgoing_config, now);
         outgoing_envelopes.create_payload()
     }
 
@@ -64,6 +67,16 @@ impl MockRelay {
             .borrow()
             .iter()
             .any(|message| message.contents.line == line)
+    }
+}
+
+struct MockLineGenerator {
+    line: String,
+}
+
+impl GetNextLine for MockLineGenerator {
+    fn get_next_line(&mut self) -> Option<String> {
+        Some(self.line.clone())
     }
 }
 

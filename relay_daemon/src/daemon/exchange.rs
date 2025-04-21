@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::future;
 use relay_core::{
-    mailroom::{Archive, Mailroom, OutgoingConfig, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, OutgoingConfig, TTLConfig},
     payload::UntrustedPayload,
 };
 use reqwest::Client;
@@ -13,13 +13,13 @@ use crate::{
     event::{Event, HandleEvent},
 };
 
-pub async fn send_to_hosts<A, E>(
-    mailroom: Arc<Mutex<Mailroom<A>>>,
-    line: Option<String>,
+pub async fn send_to_hosts<L, A, E>(
+    mailroom: Arc<Mutex<Mailroom<L, A>>>,
     config: &Config,
     event_handler: Arc<Mutex<E>>,
     fast_mode: bool,
 ) where
+    L: GetNextLine + Send + 'static,
     A: Archive + Send + 'static,
     E: HandleEvent + Send + 'static,
 {
@@ -40,11 +40,10 @@ pub async fn send_to_hosts<A, E>(
             None => None,
         })
         .map(async |(relay, host)| {
-            let outgoing_envelopes =
-                mailroom
-                    .lock()
-                    .await
-                    .get_outgoing(&relay.key, line.clone(), &outgoing_config);
+            let outgoing_envelopes = mailroom
+                .lock()
+                .await
+                .get_outgoing(&relay.key, &outgoing_config);
 
             let outgoing_payload = outgoing_envelopes.create_payload();
 

@@ -18,18 +18,20 @@ pub enum ReceivePayloadError {
     AlreadyReceivedFromKey,
 }
 
-pub struct Mailroom<A: Archive> {
-    new_messages: HashSet<Message>,
-    forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
-    forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
-    last_seen_time: Option<DateTime<Utc>>,
+pub struct Mailroom<L: GetNextLine, A: Archive> {
+    line_generator: L,
     archive: A,
     flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
     interval: Duration,
+    new_messages: HashSet<Message>,
+    forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
+    forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
+    current_line: Option<String>,
+    last_seen_time: Option<DateTime<Utc>>,
 }
 
-impl<A: Archive> Mailroom<A> {
-    pub fn new(archive: A) -> Self {
+impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
+    pub fn new(line_generator: L, archive: A) -> Self {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
                 .with_minute(0)
@@ -41,30 +43,35 @@ impl<A: Archive> Mailroom<A> {
         };
 
         Mailroom {
-            new_messages: HashSet::new(),
-            forwarding_received_this_hour: HashMap::new(),
-            forwarding_received_last_hour: HashMap::new(),
-            last_seen_time: None,
+            line_generator,
             archive,
             flatten_time,
             interval: Duration::hours(1),
+            new_messages: HashSet::new(),
+            forwarding_received_this_hour: HashMap::new(),
+            forwarding_received_last_hour: HashMap::new(),
+            current_line: None,
+            last_seen_time: None,
         }
     }
 
     #[cfg(feature = "chrono")]
     pub fn new_with_custom_time(
+        line_generator: L,
         archive: A,
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
-    ) -> Mailroom<A> {
+    ) -> Mailroom<L, A> {
         Mailroom {
-            new_messages: HashSet::new(),
-            forwarding_received_this_hour: HashMap::new(),
-            forwarding_received_last_hour: HashMap::new(),
-            last_seen_time: None,
+            line_generator,
             archive,
             flatten_time,
             interval,
+            new_messages: HashSet::new(),
+            forwarding_received_this_hour: HashMap::new(),
+            forwarding_received_last_hour: HashMap::new(),
+            current_line: None,
+            last_seen_time: None,
         }
     }
 
@@ -115,30 +122,27 @@ impl<A: Archive> Mailroom<A> {
         Ok(())
     }
 
-    pub fn get_outgoing<S: Into<String>>(
+    pub fn get_outgoing(
         &mut self,
         sending_to: &PublicKey,
-        line: Option<S>,
         outgoing_config: &OutgoingConfig,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, line, outgoing_config, Utc::now())
+        self.get_outgoing_internal(sending_to, outgoing_config, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
-    pub fn get_outgoing_at_time<S: Into<String>>(
+    pub fn get_outgoing_at_time(
         &mut self,
         sending_to: &PublicKey,
-        line: Option<S>,
         outgoing_config: &OutgoingConfig,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, line, outgoing_config, now)
+        self.get_outgoing_internal(sending_to, outgoing_config, now)
     }
 
-    fn get_outgoing_internal<S: Into<String>>(
+    fn get_outgoing_internal(
         &mut self,
         sending_to: &PublicKey,
-        line: Option<S>,
         outgoing_config: &OutgoingConfig,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
@@ -162,7 +166,7 @@ impl<A: Archive> Mailroom<A> {
             })
             .collect();
 
-        if let Some(line) = line {
+        if let Some(line) = &self.current_line {
             let contents = MessageContents {
                 uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
                 author: outgoing_config.author.clone(),
@@ -203,19 +207,26 @@ impl<A: Archive> Mailroom<A> {
 
     fn handle_time(&mut self, now: DateTime<Utc>) {
         if let Some(last_seen_time) = self.last_seen_time {
-            let now_oth = (self.flatten_time)(now);
-            let last_seen_oth = (self.flatten_time)(last_seen_time);
+            let now_flattened = (self.flatten_time)(now);
+            let last_seen_flattened = (self.flatten_time)(last_seen_time);
 
-            if now_oth == last_seen_oth + self.interval {
-                self.new_messages = HashSet::new();
-                self.forwarding_received_last_hour = self.forwarding_received_this_hour.clone();
+            if now_flattened != last_seen_flattened {
+                self.forwarding_received_last_hour =
+                    if now_flattened == last_seen_flattened + self.interval {
+                        self.forwarding_received_this_hour.clone()
+                    } else {
+                        HashMap::new()
+                    };
                 self.forwarding_received_this_hour = HashMap::new();
-            } else if now_oth != last_seen_oth {
                 self.new_messages = HashSet::new();
-                self.forwarding_received_last_hour = HashMap::new();
-                self.forwarding_received_this_hour = HashMap::new();
+                self.current_line = self.line_generator.get_next_line();
             }
         }
+
+        if self.current_line == None {
+            self.current_line = self.line_generator.get_next_line();
+        }
+
         self.last_seen_time = Some(now);
     }
 }
@@ -262,6 +273,10 @@ impl Default for TTLConfig {
             max_forwarding_ttl: DEFAULT_MAX_FORWARDING_TTL,
         }
     }
+}
+
+pub trait GetNextLine {
+    fn get_next_line(&mut self) -> Option<String>;
 }
 
 pub trait Archive {

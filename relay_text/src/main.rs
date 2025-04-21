@@ -1,9 +1,8 @@
-use relay_core::crypto::SecretKey;
+use relay_core::{crypto::SecretKey, mailroom::GetNextLine};
 use relay_daemon::{
     config::{Config, GetConfig, RelayData},
     daemon::Daemon,
     event::{Event, HandleEvent},
-    line::GetLine,
 };
 
 #[tokio::main]
@@ -23,7 +22,7 @@ async fn main() {
         max_forwarding_ttl: None,
     });
 
-    let relay_daemon = Daemon::new(RepeatingLine, text_config, EventPrinter).fast();
+    let relay_daemon = Daemon::new(IncreasingLine::new(), text_config, EventPrinter).fast();
     relay_daemon.start_sending_to_hosts().await;
 
     tokio::signal::ctrl_c()
@@ -31,11 +30,20 @@ async fn main() {
         .expect("should be able to wait on ctrl+c");
 }
 
-struct RepeatingLine;
+struct IncreasingLine {
+    count: u32,
+}
 
-impl GetLine for RepeatingLine {
-    fn get(&mut self) -> Option<String> {
-        Some("blah".to_owned())
+impl IncreasingLine {
+    fn new() -> Self {
+        Self { count: 0 }
+    }
+}
+
+impl GetNextLine for IncreasingLine {
+    fn get_next_line(&mut self) -> Option<String> {
+        self.count += 1;
+        Some(format!("line {}", self.count))
     }
 }
 
