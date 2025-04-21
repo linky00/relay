@@ -76,10 +76,6 @@ impl MockRelay {
         outgoing_envelopes.create_payload()
     }
 
-    pub fn messages(&self) -> HashSet<Message> {
-        self.messages.borrow().clone()
-    }
-
     pub fn has_message_with_line(&self, line: &str) -> bool {
         self.messages
             .borrow()
