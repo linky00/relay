@@ -1,3 +1,5 @@
+use std::env;
+
 use relay_core::{crypto::SecretKey, mailroom::GetNextLine};
 use relay_daemon::{
     config::{Config, GetConfig, RelayData},
@@ -7,13 +9,15 @@ use relay_daemon::{
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().expect("should be able to read dotenv");
+
     let text_config = TextConfig(Config {
         name: "blah".to_owned(),
         secret_key: SecretKey::generate(),
         trusted_relays: vec![
             RelayData::new(
                 SecretKey::generate().public_key(),
-                Some("https://example.com"),
+                Some(&env::var("RELAY_URL").expect("RELAY_URL should be present")),
                 Some("another relay".to_owned()),
             )
             .unwrap(),
@@ -43,7 +47,9 @@ impl IncreasingLine {
 impl GetNextLine for IncreasingLine {
     fn get_next_line(&mut self) -> Option<String> {
         self.count += 1;
-        Some(format!("line {}", self.count))
+        let line = format!("line {}", self.count);
+        println!("generated new line: \"{line}\"");
+        Some(line)
     }
 }
 

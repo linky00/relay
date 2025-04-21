@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use archive::MockArchive;
+use chrono::{DateTime, Timelike, Utc};
 use relay_core::mailroom::{GetNextLine, Mailroom};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -88,10 +89,21 @@ where
     E: HandleEvent + Sync + Send + 'static,
 {
     fn new(line_generator: L, config_reader: C, event_handler: E) -> Self {
+        let flatten_time = |datetime: DateTime<Utc>| {
+            datetime
+                .with_second(datetime.second() / 5 * 5)
+                .expect("should be able to set seconds to a multiple of 5")
+                .with_nanosecond(0)
+                .expect("should be able to set any utc time to nanosecond 0")
+        };
+        let interval = Duration::from_secs(5);
+
         Self {
-            mailroom: Arc::new(Mutex::new(Mailroom::new(
+            mailroom: Arc::new(Mutex::new(Mailroom::new_with_custom_time(
                 line_generator,
                 MockArchive::new(),
+                flatten_time,
+                interval,
             ))),
             config_reader,
             event_handler: Arc::new(Mutex::new(event_handler)),

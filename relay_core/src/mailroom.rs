@@ -1,6 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
-use chrono::{DateTime, Duration, Timelike, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use thiserror::Error;
 
 use crate::{
@@ -11,6 +14,7 @@ use crate::{
 
 const DEFAULT_INITIAL_TTL: u8 = 8;
 const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
+const HOUR_IN_SECONDS: u64 = 60 * 60;
 
 #[derive(Error, Debug)]
 pub enum ReceivePayloadError {
@@ -46,7 +50,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             line_generator,
             archive,
             flatten_time,
-            interval: Duration::hours(1),
+            interval: Duration::from_secs(HOUR_IN_SECONDS),
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
