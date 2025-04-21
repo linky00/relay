@@ -4,6 +4,11 @@ use relay_core::crypto::PublicKey;
 use reqwest::Url;
 use thiserror::Error;
 
+// todo: figure out what i'm doing with 'config that can change while running'.
+//       maybe dump the idea, or maybe have the library user call some function to say when the
+//       config has been updated. similar question is if i'll have some way of storing forwarding
+//       messages between restarts. kind of annoying, but an hour is a long time.
+
 #[derive(Clone)]
 pub struct Config {
     pub trusted_relays: Vec<RelayData>,
