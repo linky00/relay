@@ -17,8 +17,8 @@ async fn main() {
         trusted_relays: vec![
             RelayData::new(
                 SecretKey::generate().public_key(),
-                Some(&env::var("RELAY_URL").expect("RELAY_URL should be present")),
                 Some("another relay".to_owned()),
+                Some(&env::var("RELAY_URL").expect("RELAY_URL should be present")),
             )
             .unwrap(),
         ],
@@ -72,51 +72,51 @@ impl EventPrinter {
 impl HandleEvent for EventPrinter {
     fn handle_event(&mut self, event: Event) {
         match event {
-            Event::BeginningSendingToHosts => {
-                println!("sending to hosts");
+            Event::BeginningSendingToListeners => {
+                println!("sending to listeners");
             }
-            Event::SentToHost(host, envelopes) => {
+            Event::SentToListener(relay, envelopes) => {
                 println!(
-                    "sent host relay {} {} envelopes",
-                    Self::relay_display(host),
+                    "sent listener relay {} {} envelopes",
+                    Self::relay_display(relay),
                     envelopes.len()
                 );
             }
-            Event::ReceivedFromHost(host, envelopes) => {
+            Event::ReceivedFromListener(relay, envelopes) => {
                 println!(
-                    "received from host relay {} {} envelopes",
-                    Self::relay_display(host),
+                    "received from listener relay {} {} envelopes",
+                    Self::relay_display(relay),
                     envelopes.len()
                 );
             }
-            Event::ProblemSendingToHost(host, error) => {
+            Event::ProblemSendingToListener(relay, error) => {
                 println!(
-                    "problem sending to host relay {}: {}",
-                    Self::relay_display(host),
+                    "problem sending to listener relay {}: {}",
+                    Self::relay_display(relay),
                     error
                 );
             }
-            Event::HttpErrorResponseFromHost(host, error) => {
+            Event::HttpErrorResponseFromListener(relay, error) => {
                 println!(
-                    "http error response from host relay {}: {}",
-                    Self::relay_display(host),
+                    "http error response from listener relay {}: {}",
+                    Self::relay_display(relay),
                     error
                 );
             }
-            Event::BadResponseFromHost(host) => {
+            Event::BadResponseFromListener(relay) => {
                 println!(
-                    "received bad response from host relay {}",
-                    Self::relay_display(host)
+                    "received bad response from listener relay {}",
+                    Self::relay_display(relay)
                 );
             }
-            Event::AlreadyReceivedFromHost(host) => {
+            Event::AlreadyReceivedFromListener(relay) => {
                 println!(
-                    "already received from host relay {}",
-                    Self::relay_display(host)
+                    "already received from listener relay {}",
+                    Self::relay_display(relay)
                 );
             }
-            Event::FinishedSendingToHosts => {
-                println!("finished sending to hosts");
+            Event::FinishedSendingToListener => {
+                println!("finished sending to listener");
             }
         }
     }

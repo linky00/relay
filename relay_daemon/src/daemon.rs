@@ -54,7 +54,7 @@ where
                         let state = Arc::clone(&state);
                         Box::pin(async move {
                             if let Some(config) = state.config_reader.get() {
-                                exchange::send_to_hosts(
+                                exchange::send_to_listeners(
                                     Arc::clone(&state.mailroom),
                                     config,
                                     Arc::clone(&state.event_handler),

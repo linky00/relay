@@ -28,25 +28,25 @@ pub enum RelayDataError {
 #[derive(Clone)]
 pub struct RelayData {
     pub key: PublicKey,
-    pub(crate) host: Option<Url>,
     pub nickname: Option<String>,
+    pub(crate) listener_endpoint: Option<Url>,
 }
 
 impl RelayData {
     pub fn new(
         key: PublicKey,
-        host_url: Option<&str>,
         nickname: Option<String>,
+        listener_endpoint: Option<&str>,
     ) -> Result<Self, RelayDataError> {
-        let host = match host_url {
+        let endpoint = match listener_endpoint {
             Some(url_str) => Some(Url::from_str(url_str).map_err(|_| RelayDataError::UrlNotValid)?),
             None => None,
         };
 
         Ok(RelayData {
             key,
-            host,
             nickname,
+            listener_endpoint: endpoint,
         })
     }
 }

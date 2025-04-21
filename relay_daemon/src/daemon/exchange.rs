@@ -13,7 +13,7 @@ use crate::{
     event::{self, Event, HandleEvent},
 };
 
-pub async fn send_to_hosts<L, A, E>(
+pub async fn send_to_listeners<L, A, E>(
     mailroom: Arc<Mutex<Mailroom<L, A>>>,
     config: &Config,
     event_handler: Arc<Mutex<E>>,
@@ -22,7 +22,7 @@ pub async fn send_to_hosts<L, A, E>(
     A: Archive + Send + 'static,
     E: HandleEvent + Send + 'static,
 {
-    event::emit_event(&event_handler, Event::BeginningSendingToHosts).await;
+    event::emit_event(&event_handler, Event::BeginningSendingToListeners).await;
 
     let client = Client::new();
 
@@ -33,11 +33,11 @@ pub async fn send_to_hosts<L, A, E>(
         .iter()
         .filter_map(|relay| {
             relay
-                .host
+                .listener_endpoint
                 .as_ref()
-                .map(|host| (relay.clone(), host.clone()))
+                .map(|endpoint| (relay.clone(), endpoint.clone()))
         })
-        .map(|(relay, host)| {
+        .map(|(relay, endpoint)| {
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);
             let config = config.clone();
@@ -52,17 +52,17 @@ pub async fn send_to_hosts<L, A, E>(
 
                 let outgoing_payload = outgoing_envelopes.create_payload();
 
-                match client.post(host).body(outgoing_payload).send().await {
+                match client.post(endpoint).body(outgoing_payload).send().await {
                     Ok(response) => {
                         event::emit_event(
                             &event_handler,
-                            Event::SentToHost(relay.clone(), outgoing_envelopes.envelopes),
+                            Event::SentToListener(relay.clone(), outgoing_envelopes.envelopes),
                         )
                         .await;
 
                         let handle_response = async || {
                             if !response.status().is_success() {
-                                return Err(Event::HttpErrorResponseFromHost(
+                                return Err(Event::HttpErrorResponseFromListener(
                                     relay.clone(),
                                     format!(
                                         "{}: {}",
@@ -75,20 +75,20 @@ pub async fn send_to_hosts<L, A, E>(
                             let response_text = response
                                 .text()
                                 .await
-                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+                                .map_err(|_| Event::BadResponseFromListener(relay.clone()))?;
 
                             let untrusted_payload = UntrustedPayload::from_json(&response_text)
-                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+                                .map_err(|_| Event::BadResponseFromListener(relay.clone()))?;
 
                             let trusted_payload = untrusted_payload
                                 .try_trust(config.trusted_public_keys())
-                                .map_err(|_| Event::BadResponseFromHost(relay.clone()))?;
+                                .map_err(|_| Event::BadResponseFromListener(relay.clone()))?;
 
                             let envelopes = trusted_payload.envelopes().clone();
 
                             match mailroom.lock().await.receive_payload(trusted_payload) {
-                                Ok(()) => Ok(Event::ReceivedFromHost(relay.clone(), envelopes)),
-                                Err(_) => Ok(Event::AlreadyReceivedFromHost(relay.clone())),
+                                Ok(()) => Ok(Event::ReceivedFromListener(relay.clone(), envelopes)),
+                                Err(_) => Ok(Event::AlreadyReceivedFromListener(relay.clone())),
                             }
                         };
 
@@ -98,7 +98,7 @@ pub async fn send_to_hosts<L, A, E>(
                     Err(error) => {
                         event::emit_event(
                             &event_handler,
-                            Event::ProblemSendingToHost(relay.clone(), error.to_string()),
+                            Event::ProblemSendingToListener(relay.clone(), error.to_string()),
                         )
                         .await;
                     }
@@ -109,7 +109,7 @@ pub async fn send_to_hosts<L, A, E>(
 
     future::join_all(handles).await;
 
-    event::emit_event(&event_handler, Event::FinishedSendingToHosts).await;
+    event::emit_event(&event_handler, Event::FinishedSendingToListener).await;
 }
 
 fn create_outgoing_config(config: &Config) -> OutgoingConfig {
