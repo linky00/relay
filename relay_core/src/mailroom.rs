@@ -25,17 +25,18 @@ pub enum ReceivePayloadError {
 pub struct Mailroom<L: GetNextLine, A: Archive> {
     line_generator: L,
     archive: A,
+    secret_key: SecretKey,
     flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
     interval: Duration,
     new_messages: HashSet<Message>,
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
-    current_line: Option<String>,
+    pub current_message: Option<Message>,
     last_seen_time: Option<DateTime<Utc>>,
 }
 
 impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
-    pub fn new(line_generator: L, archive: A) -> Self {
+    pub fn new(line_generator: L, archive: A, secret_key: SecretKey) -> Self {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
                 .with_minute(0)
@@ -46,41 +47,38 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
                 .expect("should be able to set any utc time to nanosecond 0")
         };
 
-        Mailroom {
+        let mut mailroom = Mailroom {
             line_generator,
             archive,
+            secret_key,
             flatten_time,
             interval: Duration::from_secs(HOUR_IN_SECONDS),
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
-            current_line: None,
+            current_message: None,
             last_seen_time: None,
-        }
+        };
+
+        mailroom.set_new_message();
+
+        mailroom
     }
 
     #[cfg(feature = "chrono")]
     pub fn new_with_custom_time(
         line_generator: L,
         archive: A,
+        secret_key: SecretKey,
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
     ) -> Mailroom<L, A> {
-        Mailroom {
-            line_generator,
-            archive,
-            flatten_time,
-            interval,
-            new_messages: HashSet::new(),
-            forwarding_received_this_hour: HashMap::new(),
-            forwarding_received_last_hour: HashMap::new(),
-            current_line: None,
-            last_seen_time: None,
-        }
-    }
+        let mut mailroom = Self::new(line_generator, archive, secret_key);
 
-    pub fn current_line(&self) -> Option<String> {
-        self.current_line.clone()
+        mailroom.flatten_time = flatten_time;
+        mailroom.interval = interval;
+
+        mailroom
     }
 
     pub fn receive_payload(&mut self, payload: TrustedPayload) -> Result<(), ReceivePayloadError> {
@@ -133,25 +131,25 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
     pub fn get_outgoing(
         &mut self,
         sending_to: &PublicKey,
-        outgoing_config: &OutgoingConfig,
+        ttl_config: TTLConfig,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, outgoing_config, Utc::now())
+        self.get_outgoing_internal(sending_to, ttl_config, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
     pub fn get_outgoing_at_time(
         &mut self,
         sending_to: &PublicKey,
-        outgoing_config: &OutgoingConfig,
+        ttl_config: TTLConfig,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
-        self.get_outgoing_internal(sending_to, outgoing_config, now)
+        self.get_outgoing_internal(sending_to, ttl_config, now)
     }
 
     fn get_outgoing_internal(
         &mut self,
         sending_to: &PublicKey,
-        outgoing_config: &OutgoingConfig,
+        ttl_config: TTLConfig,
         now: DateTime<Utc>,
     ) -> OutgoingEnvelopes {
         self.handle_time(now);
@@ -162,10 +160,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             .filter(|(from_key, _)| *from_key != sending_to)
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
-                envelope.ttl -= outgoing_config
-                    .ttl_config
-                    .max_forwarding_ttl
-                    .min(envelope.ttl - 1);
+                envelope.ttl -= ttl_config.max_forwarding_ttl.min(envelope.ttl - 1);
                 if envelope.ttl > 0 {
                     Some(envelope)
                 } else {
@@ -174,31 +169,11 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             })
             .collect();
 
-        if let Some(line) = &self.current_line {
-            let contents = MessageContents {
-                uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
-                author: outgoing_config.author.clone(),
-                line: line.into(),
-            };
-
-            let contents_json = serde_json::to_string(&contents)
-                .expect("should be able to serialize any message contents to json");
-
-            let contents_bytes = get_canon_json_bytes(&contents_json)
-                .expect("should be able to get canon bytes for any json string");
-
-            let signature = outgoing_config.secret_key.clone().sign(&contents_bytes);
-
+        if let Some(current_message) = &self.current_message {
             let envelope = Envelope {
                 forwarded: vec![],
-                ttl: outgoing_config.ttl_config.initial_ttl,
-                message: Message {
-                    certificate: Certificate {
-                        key: outgoing_config.secret_key.public_key().to_string(),
-                        signature,
-                    },
-                    contents,
-                },
+                ttl: ttl_config.initial_ttl,
+                message: current_message.clone(),
             };
 
             self.archive
@@ -209,7 +184,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
 
         OutgoingEnvelopes {
             envelopes: sending_envelopes,
-            secret_key: outgoing_config.secret_key.clone(),
+            secret_key: self.secret_key.clone(),
         }
     }
 
@@ -227,15 +202,39 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
                     };
                 self.forwarding_received_this_hour = HashMap::new();
                 self.new_messages = HashSet::new();
-                self.current_line = self.line_generator.get_next_line();
+                self.set_new_message();
             }
         }
 
-        if self.current_line.is_none() {
-            self.current_line = self.line_generator.get_next_line();
-        }
-
         self.last_seen_time = Some(now);
+    }
+
+    fn set_new_message(&mut self) {
+        self.current_message = if let Some(line) = self.line_generator.get_next_line() {
+            let contents = MessageContents {
+                uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
+                author: line.author.clone(),
+                line: line.text.into(),
+            };
+
+            let contents_json = serde_json::to_string(&contents)
+                .expect("should be able to serialize any message contents to json");
+
+            let contents_bytes = get_canon_json_bytes(&contents_json)
+                .expect("should be able to get canon bytes for any json string");
+
+            let signature = self.secret_key.clone().sign(&contents_bytes);
+
+            Some(Message {
+                certificate: Certificate {
+                    key: self.secret_key.public_key().to_string(),
+                    signature,
+                },
+                contents,
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -245,24 +244,7 @@ pub struct OutgoingEnvelopes {
     pub(crate) secret_key: SecretKey,
 }
 
-#[derive(Clone)]
-pub struct OutgoingConfig {
-    pub(crate) author: String,
-    pub(crate) secret_key: SecretKey,
-    pub(crate) ttl_config: TTLConfig,
-}
-
-impl OutgoingConfig {
-    pub fn new<S: Into<String>>(author: S, secret_key: SecretKey, ttl_config: TTLConfig) -> Self {
-        Self {
-            author: author.into(),
-            secret_key,
-            ttl_config,
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct TTLConfig {
     initial_ttl: u8,
     max_forwarding_ttl: u8,
@@ -286,8 +268,14 @@ impl Default for TTLConfig {
     }
 }
 
+#[derive(Clone)]
+pub struct Line {
+    pub text: String,
+    pub author: String,
+}
+
 pub trait GetNextLine {
-    fn get_next_line(&mut self) -> Option<String>;
+    fn get_next_line(&mut self) -> Option<Line>;
 }
 
 pub trait Archive {

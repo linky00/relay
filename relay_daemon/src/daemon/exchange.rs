@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::future;
 use relay_core::{
-    mailroom::{Archive, GetNextLine, Mailroom, OutgoingConfig, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, TTLConfig},
     payload::UntrustedPayload,
 };
 use reqwest::Client;
@@ -26,7 +26,7 @@ pub async fn send_to_listeners<L, A, E>(
 
     let client = Client::new();
 
-    let outgoing_config = create_outgoing_config(config);
+    let ttl_config = create_ttl_config(config);
 
     let handles: Vec<_> = config
         .trusted_relays
@@ -42,13 +42,9 @@ pub async fn send_to_listeners<L, A, E>(
             let mailroom = Arc::clone(&mailroom);
             let config = config.clone();
             let event_handler = Arc::clone(&event_handler);
-            let outgoing_config = outgoing_config.clone();
 
             async move {
-                let outgoing_envelopes = mailroom
-                    .lock()
-                    .await
-                    .get_outgoing(&relay.key, &outgoing_config);
+                let outgoing_envelopes = mailroom.lock().await.get_outgoing(&relay.key, ttl_config);
 
                 let outgoing_payload = outgoing_envelopes.create_payload();
 
@@ -112,10 +108,6 @@ pub async fn send_to_listeners<L, A, E>(
     event::emit_event(&event_handler, Event::FinishedSendingToListener).await;
 }
 
-fn create_outgoing_config(config: &Config) -> OutgoingConfig {
-    OutgoingConfig::new(
-        config.name.clone(),
-        config.secret_key.clone(),
-        TTLConfig::new(config.custom_initial_ttl, config.custom_max_forwarding_ttl),
-    )
+fn create_ttl_config(config: &Config) -> TTLConfig {
+    TTLConfig::new(config.custom_initial_ttl, config.custom_max_forwarding_ttl)
 }

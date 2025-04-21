@@ -2,7 +2,10 @@ use std::{sync::Arc, time::Duration};
 
 use archive::MockArchive;
 use chrono::{DateTime, Timelike, Utc};
-use relay_core::mailroom::{GetNextLine, Mailroom};
+use relay_core::{
+    crypto::SecretKey,
+    mailroom::{GetNextLine, Mailroom},
+};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -22,10 +25,16 @@ where
     C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
-    pub fn new(line_generator: L, config_reader: C, event_handler: E) -> Self {
+    pub fn new(
+        line_generator: L,
+        secret_key: SecretKey,
+        config_reader: C,
+        event_handler: E,
+    ) -> Self {
         Self {
             state: Arc::new(DaemonState::new(
                 line_generator,
+                secret_key,
                 config_reader,
                 event_handler,
             )),
@@ -33,8 +42,13 @@ where
         }
     }
 
-    pub fn new_fast(line_generator: L, config_reader: C, event_handler: E) -> Self {
-        let mut daemon = Self::new(line_generator, config_reader, event_handler);
+    pub fn new_fast(
+        line_generator: L,
+        secret_key: SecretKey,
+        config_reader: C,
+        event_handler: E,
+    ) -> Self {
+        let mut daemon = Self::new(line_generator, secret_key, config_reader, event_handler);
         daemon.fast_mode = true;
         daemon
     }
@@ -85,7 +99,7 @@ where
     C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
-    fn new(line_generator: L, config_reader: C, event_handler: E) -> Self {
+    fn new(line_generator: L, secret_key: SecretKey, config_reader: C, event_handler: E) -> Self {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
                 .with_second(datetime.second() / 5 * 5)
@@ -99,6 +113,7 @@ where
             mailroom: Arc::new(Mutex::new(Mailroom::new_with_custom_time(
                 line_generator,
                 MockArchive::new(),
+                secret_key,
                 flatten_time,
                 interval,
             ))),

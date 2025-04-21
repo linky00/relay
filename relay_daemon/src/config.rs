@@ -1,13 +1,11 @@
 use std::str::FromStr;
 
-use relay_core::crypto::{PublicKey, SecretKey};
+use relay_core::crypto::PublicKey;
 use reqwest::Url;
 use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Config {
-    pub name: String,
-    pub secret_key: SecretKey,
     pub trusted_relays: Vec<RelayData>,
     pub custom_initial_ttl: Option<u8>,
     pub custom_max_forwarding_ttl: Option<u8>,

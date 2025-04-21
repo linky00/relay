@@ -1,6 +1,9 @@
 use std::env;
 
-use relay_core::{crypto::SecretKey, mailroom::GetNextLine};
+use relay_core::{
+    crypto::SecretKey,
+    mailroom::{GetNextLine, Line},
+};
 use relay_daemon::{
     config::{Config, GetConfig, ListenerConfig, RelayData},
     daemon::Daemon,
@@ -11,9 +14,9 @@ use relay_daemon::{
 async fn main() {
     dotenvy::dotenv().expect("should be able to read dotenv");
 
+    let secret_key = SecretKey::generate();
+
     let text_config = TextConfig(Config {
-        name: "blah".to_owned(),
-        secret_key: SecretKey::generate(),
         trusted_relays: vec![
             RelayData::new(
                 SecretKey::generate().public_key(),
@@ -27,7 +30,12 @@ async fn main() {
         listener_config: Some(ListenerConfig { custom_port: None }),
     });
 
-    let relay_daemon = Daemon::new_fast(IncreasingLine::new(), text_config, EventPrinter);
+    let relay_daemon = Daemon::new_fast(
+        IncreasingLine::new("me"),
+        secret_key,
+        text_config,
+        EventPrinter,
+    );
     relay_daemon.start().await;
 
     tokio::signal::ctrl_c()
@@ -36,21 +44,28 @@ async fn main() {
 }
 
 struct IncreasingLine {
+    author: String,
     count: u32,
 }
 
 impl IncreasingLine {
-    fn new() -> Self {
-        Self { count: 0 }
+    fn new<S: Into<String>>(author: S) -> Self {
+        Self {
+            author: author.into(),
+            count: 0,
+        }
     }
 }
 
 impl GetNextLine for IncreasingLine {
-    fn get_next_line(&mut self) -> Option<String> {
+    fn get_next_line(&mut self) -> Option<Line> {
         self.count += 1;
-        let line = format!("line {}", self.count);
-        println!("generated new line: \"{line}\"");
-        Some(line)
+        let text = format!("line {}", self.count);
+        println!("generated new line: \"{text}\"");
+        Some(Line {
+            text,
+            author: self.author.clone(),
+        })
     }
 }
 
