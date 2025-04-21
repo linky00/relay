@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use anyhow::Result;
 use base64::{Engine, prelude::BASE64_STANDARD};
@@ -42,16 +42,18 @@ impl PublicKey {
         self.0.as_bytes()
     }
 
-    pub fn to_string(&self) -> String {
-        b64_from_bytes(self.as_bytes())
-    }
-
     pub(crate) fn verify(&self, message: Vec<u8>, signature: &str) -> Result<()> {
         let signature_bytes = bytes_from_b64(signature)?;
         let signature = Signature::from_bytes(&signature_bytes);
         self.0.verify_strict(&message, &signature)?;
 
         Ok(())
+    }
+}
+
+impl Display for PublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", b64_from_bytes(self.as_bytes()))
     }
 }
 
@@ -75,16 +77,18 @@ impl SecretKey {
         self.0.as_bytes()
     }
 
-    pub fn to_string(&self) -> String {
-        b64_from_bytes(self.as_bytes())
-    }
-
     pub fn public_key(&self) -> PublicKey {
         PublicKey(self.0.verifying_key())
     }
 
     pub(crate) fn sign(&mut self, message: &[u8]) -> String {
         b64_from_bytes(&self.0.sign(message).to_bytes())
+    }
+}
+
+impl Display for SecretKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", b64_from_bytes(self.as_bytes()))
     }
 }
 
