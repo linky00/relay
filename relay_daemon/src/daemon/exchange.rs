@@ -31,27 +31,28 @@ pub async fn send_to_hosts<L, A, E>(
 
     let outgoing_config = create_outgoing_config(&config);
 
-    let handles = config
+    let handles: Vec<_> = config
         .trusted_relays
         .iter()
         .filter_map(|relay| match &relay.host {
             Some(host) => Some((relay.clone(), host.clone())),
             None => None,
         })
-        .map(async |(relay, host)| {
-            let outgoing_envelopes = mailroom
-                .lock()
-                .await
-                .get_outgoing(&relay.key, &outgoing_config);
-
-            let outgoing_payload = outgoing_envelopes.create_payload();
-
+        .map(|(relay, host)| {
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);
             let config = config.clone();
             let event_handler = Arc::clone(&event_handler);
+            let outgoing_config = outgoing_config.clone();
 
-            tokio::spawn(async move {
+            async move {
+                let outgoing_envelopes = mailroom
+                    .lock()
+                    .await
+                    .get_outgoing(&relay.key, &outgoing_config);
+
+                let outgoing_payload = outgoing_envelopes.create_payload();
+
                 match client.post(host).body(outgoing_payload).send().await {
                     Ok(response) => {
                         let mut event_handler = event_handler.lock().await;
@@ -112,8 +113,9 @@ pub async fn send_to_hosts<L, A, E>(
                             ));
                     }
                 };
-            })
-        });
+            }
+        })
+        .collect();
 
     future::join_all(handles).await;
 
