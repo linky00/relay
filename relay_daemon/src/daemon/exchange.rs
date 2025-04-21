@@ -105,7 +105,7 @@ pub async fn send_to_listeners<L, A, E>(
 
     future::join_all(handles).await;
 
-    event::emit_event(&event_handler, Event::FinishedSendingToListener).await;
+    event::emit_event(&event_handler, Event::FinishedSendingToListeners).await;
 }
 
 fn create_ttl_config(config: &Config) -> TTLConfig {

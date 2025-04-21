@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 use crate::config::RelayData;
 
 pub enum Event {
+    StartedListener(u16),
+    StartedSenderSchedule,
     BeginningSendingToListeners,
     SentToListener(RelayData, Vec<Envelope>),
     ReceivedFromListener(RelayData, Vec<Envelope>),
@@ -13,7 +15,7 @@ pub enum Event {
     HttpErrorResponseFromListener(RelayData, String),
     BadResponseFromListener(RelayData),
     AlreadyReceivedFromListener(RelayData),
-    FinishedSendingToListener,
+    FinishedSendingToListeners,
 }
 
 pub trait HandleEvent {

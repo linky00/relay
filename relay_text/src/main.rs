@@ -88,8 +88,14 @@ impl EventPrinter {
 impl HandleEvent for EventPrinter {
     fn handle_event(&mut self, event: Event) {
         match event {
+            Event::StartedListener(port) => {
+                println!("started listening on {port}");
+            }
+            Event::StartedSenderSchedule => {
+                println!("started sender schedule")
+            }
             Event::BeginningSendingToListeners => {
-                println!("sending to listeners");
+                println!("beginning sending to listeners");
             }
             Event::SentToListener(relay, envelopes) => {
                 println!(
@@ -131,8 +137,8 @@ impl HandleEvent for EventPrinter {
                     Self::relay_display(relay)
                 );
             }
-            Event::FinishedSendingToListener => {
-                println!("finished sending to listener");
+            Event::FinishedSendingToListeners => {
+                println!("finished sending to listeners");
             }
         }
     }

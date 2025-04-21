@@ -11,7 +11,10 @@ use thiserror::Error;
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::{config::GetConfig, event::HandleEvent};
+use crate::{
+    config::GetConfig,
+    event::{self, Event, HandleEvent},
+};
 
 mod archive;
 mod exchange;
@@ -87,6 +90,8 @@ where
                     .await
                     .expect("should run indefinitely");
             });
+
+            event::emit_event(&self.state.event_handler, Event::StartedListener(port)).await;
         }
 
         let scheduler = JobScheduler::new()
@@ -124,6 +129,8 @@ where
             .start()
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
+
+        event::emit_event(&self.state.event_handler, Event::StartedSenderSchedule).await;
 
         Ok(())
     }
