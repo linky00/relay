@@ -94,6 +94,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         self.receive_payload_internal(payload, now)
     }
 
+    // todo: this should probably just receive a reference to TrustedPayload
     fn receive_payload_internal(
         &mut self,
         payload: TrustedPayload,

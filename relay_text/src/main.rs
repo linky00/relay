@@ -88,57 +88,76 @@ impl EventPrinter {
 impl HandleEvent for EventPrinter {
     fn handle_event(&mut self, event: Event) {
         match event {
-            Event::StartedListener(port) => {
-                println!("started listening on {port}");
+            Event::ListenerStartedListening(port) => {
+                println!("listener started listening on {port}");
             }
-            Event::StartedSenderSchedule => {
-                println!("started sender schedule")
-            }
-            Event::BeginningSendingToListeners => {
-                println!("beginning sending to listeners");
-            }
-            Event::SentToListener(relay, envelopes) => {
+            Event::ListenerReceivedFromSender(relay_data, envelopes) => {
                 println!(
-                    "sent listener relay {} {} envelopes",
+                    "listener received from sender relay {}: {} envelopes",
+                    Self::relay_display(relay_data.expect("this should exist")),
+                    envelopes.len()
+                );
+            }
+            Event::ListenerReceivedBadPayload => {
+                println!("listener received bad payload");
+            }
+            Event::ListenerReceivedFromUntrustedSender => {
+                println!("listener received from untrusted sender");
+            }
+            Event::ListenerAlreadyReceivedFromSender(relay_data) => {
+                println!(
+                    "listener already received from sender relay {}",
+                    Self::relay_display(relay_data.expect("this should exist"))
+                )
+            }
+            Event::SenderStartedSchedule => {
+                println!("sender started schedule");
+            }
+            Event::SenderBeginningRun => {
+                println!("sender beginning run");
+            }
+            Event::SenderSentToListener(relay, envelopes) => {
+                println!(
+                    "sender sent listener relay {}: {} envelopes",
                     Self::relay_display(relay),
                     envelopes.len()
                 );
             }
-            Event::ReceivedFromListener(relay, envelopes) => {
+            Event::SenderReceivedFromListener(relay, envelopes) => {
                 println!(
-                    "received from listener relay {} {} envelopes",
+                    "sender received from listener relay {}: {} envelopes",
                     Self::relay_display(relay),
                     envelopes.len()
                 );
             }
-            Event::ProblemSendingToListener(relay, error) => {
+            Event::SenderFailedSending(relay, error) => {
                 println!(
-                    "problem sending to listener relay {}: {}",
+                    "sender failed sending to listener relay {}: {}",
                     Self::relay_display(relay),
                     error
                 );
             }
-            Event::HttpErrorResponseFromListener(relay, error) => {
+            Event::SenderReceivedHttpError(relay, error) => {
                 println!(
-                    "http error response from listener relay {}: {}",
+                    "sender received http error from listener relay {}: {}",
                     Self::relay_display(relay),
                     error
                 );
             }
-            Event::BadResponseFromListener(relay) => {
+            Event::SenderReceivedBadResponse(relay) => {
                 println!(
-                    "received bad response from listener relay {}",
+                    "sender received bad response from listener relay {}",
                     Self::relay_display(relay)
                 );
             }
-            Event::AlreadyReceivedFromListener(relay) => {
+            Event::SenderAlreadyReceivedFromListener(relay) => {
                 println!(
-                    "already received from listener relay {}",
+                    "sender already received from listener relay {}",
                     Self::relay_display(relay)
                 );
             }
-            Event::FinishedSendingToListeners => {
-                println!("finished sending to listeners");
+            Event::SenderFinishedRun => {
+                println!("sender finished run");
             }
         }
     }

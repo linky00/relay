@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use archive::MockArchive;
-use axum::{Router, routing};
+use axum::{Router, extract::State, response::IntoResponse, routing};
 use chrono::{DateTime, Timelike, Utc};
 use relay_core::{
     crypto::SecretKey,
@@ -76,7 +76,10 @@ where
             .ok_or(DaemonError::CannotReadConfig)?;
 
         if let Some(listener_config) = &config.listener_config {
-            let router = Router::new().route("/", routing::post(|| async { "blah" }));
+            let state = Arc::clone(&self.state);
+            let router = Router::new()
+                .route("/", routing::post(Self::handle_request))
+                .with_state(state);
 
             let port = listener_config.custom_port.unwrap_or(7070);
             let address = format!("0.0.0.0:{}", port);
@@ -86,12 +89,16 @@ where
                 .map_err(|_| DaemonError::CannotBindPort(port))?;
 
             tokio::spawn(async {
-                axum::serve(listener, router)
+                axum::serve(listener, router.into_make_service())
                     .await
                     .expect("should run indefinitely");
             });
 
-            event::emit_event(&self.state.event_handler, Event::StartedListener(port)).await;
+            event::emit_event(
+                &self.state.event_handler,
+                Event::ListenerStartedListening(port),
+            )
+            .await;
         }
 
         let scheduler = JobScheduler::new()
@@ -130,15 +137,28 @@ where
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
 
-        event::emit_event(&self.state.event_handler, Event::StartedSenderSchedule).await;
+        event::emit_event(&self.state.event_handler, Event::SenderStartedSchedule).await;
 
         Ok(())
+    }
+
+    async fn handle_request(
+        State(state): State<Arc<DaemonState<L, C, E>>>,
+        body: String,
+    ) -> impl IntoResponse {
+        exchange::respond_to_sender(
+            &body,
+            Arc::clone(&state.mailroom),
+            Arc::clone(&state.config_reader),
+            Arc::clone(&state.event_handler),
+        )
+        .await
     }
 }
 
 struct DaemonState<L: GetNextLine, C, E> {
     mailroom: Arc<Mutex<Mailroom<L, MockArchive>>>,
-    config_reader: C,
+    config_reader: Arc<C>,
     event_handler: Arc<Mutex<E>>,
 }
 
@@ -166,7 +186,7 @@ where
                 flatten_time,
                 interval,
             ))),
-            config_reader,
+            config_reader: Arc::new(config_reader),
             event_handler: Arc::new(Mutex::new(event_handler)),
         }
     }

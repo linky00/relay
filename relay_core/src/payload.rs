@@ -125,6 +125,10 @@ pub struct TrustedPayload {
 }
 
 impl TrustedPayload {
+    pub fn public_key(&self) -> &PublicKey {
+        &self.public_key
+    }
+
     pub fn certificate(&self) -> &Certificate {
         &self.certificate
     }
