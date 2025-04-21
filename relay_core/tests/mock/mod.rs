@@ -3,10 +3,17 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use chrono::{DateTime, Utc};
 use relay_core::{
     crypto::{PublicKey, SecretKey},
-    mailroom::{Archive, GetNextLine, Mailroom, OutgoingConfig, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, OutgoingConfig, ReceivePayloadError, TTLConfig},
     message::{Envelope, Message},
-    payload::UntrustedPayload,
+    payload::{UntrustedPayload, UntrustedPayloadError},
 };
+
+#[derive(Debug)]
+pub enum MockReceivePayloadError {
+    CannotReadPayload(UntrustedPayloadError),
+    CannotTrustPayload(UntrustedPayloadError),
+    CannotReceiveInMailroom(ReceivePayloadError),
+}
 
 pub struct MockRelay {
     pub public_key: PublicKey,
@@ -19,7 +26,7 @@ pub struct MockRelay {
 }
 
 impl MockRelay {
-    pub fn new<S: Into<String>>(name: &str, line: S) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
         let secret_key = SecretKey::generate();
 
         let envelopes = Rc::new(RefCell::new(vec![]));
@@ -28,7 +35,7 @@ impl MockRelay {
         MockRelay {
             public_key: secret_key.public_key(),
             mailroom: Mailroom::new(
-                MockLineGenerator { line: line.into() },
+                MockLineGenerator,
                 MockArchive {
                     envelopes: Rc::clone(&envelopes),
                     messages: Rc::clone(&messages),
@@ -45,14 +52,20 @@ impl MockRelay {
         self.trusted_keys.insert(key);
     }
 
-    pub fn receive_payload(&mut self, payload: &str, now: DateTime<Utc>) {
-        let unverified_payload = UntrustedPayload::from_json(payload).unwrap();
+    pub fn receive_payload(
+        &mut self,
+        payload: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), MockReceivePayloadError> {
+        let unverified_payload = UntrustedPayload::from_json(payload)
+            .map_err(|e| MockReceivePayloadError::CannotReadPayload(e))?;
         let verified_payload = unverified_payload
             .try_trust(self.trusted_keys.clone())
-            .unwrap();
+            .map_err(|e| MockReceivePayloadError::CannotTrustPayload(e))?;
         self.mailroom
             .receive_payload_at_time(verified_payload, now)
-            .unwrap();
+            .map_err(|e| MockReceivePayloadError::CannotReceiveInMailroom(e))?;
+        Ok(())
     }
 
     pub fn create_payload(&mut self, for_key: PublicKey, now: DateTime<Utc>) -> String {
@@ -68,15 +81,17 @@ impl MockRelay {
             .iter()
             .any(|message| message.contents.line == line)
     }
+
+    pub fn current_line(&self) -> Option<String> {
+        self.mailroom.current_line()
+    }
 }
 
-struct MockLineGenerator {
-    line: String,
-}
+struct MockLineGenerator;
 
 impl GetNextLine for MockLineGenerator {
     fn get_next_line(&mut self) -> Option<String> {
-        Some(self.line.clone())
+        Some(format!("line {}", uuid::Uuid::new_v4().hyphenated()))
     }
 }
 

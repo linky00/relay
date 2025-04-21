@@ -79,6 +79,10 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         }
     }
 
+    pub fn current_line(&self) -> Option<String> {
+        self.current_line.clone()
+    }
+
     pub fn receive_payload(&mut self, payload: TrustedPayload) -> Result<(), ReceivePayloadError> {
         self.receive_payload_internal(payload, Utc::now())
     }
