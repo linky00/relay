@@ -2,7 +2,7 @@ use std::env;
 
 use relay_core::{crypto::SecretKey, mailroom::GetNextLine};
 use relay_daemon::{
-    config::{Config, GetConfig, RelayData},
+    config::{Config, GetConfig, ListenerConfig, RelayData},
     daemon::Daemon,
     event::{Event, HandleEvent},
 };
@@ -22,8 +22,9 @@ async fn main() {
             )
             .unwrap(),
         ],
-        initial_ttl: None,
-        max_forwarding_ttl: None,
+        custom_initial_ttl: None,
+        custom_max_forwarding_ttl: None,
+        listener_config: Some(ListenerConfig { custom_port: None }),
     });
 
     let relay_daemon = Daemon::new_fast(IncreasingLine::new(), text_config, EventPrinter);

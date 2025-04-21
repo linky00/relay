@@ -116,6 +116,6 @@ fn create_outgoing_config(config: &Config) -> OutgoingConfig {
     OutgoingConfig::new(
         config.name.clone(),
         config.secret_key.clone(),
-        TTLConfig::new(config.initial_ttl, config.max_forwarding_ttl),
+        TTLConfig::new(config.custom_initial_ttl, config.custom_max_forwarding_ttl),
     )
 }
