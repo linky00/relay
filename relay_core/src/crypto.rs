@@ -45,7 +45,7 @@ impl PublicKey {
     pub(crate) fn verify(&self, message: &[u8], signature: &str) -> Result<()> {
         let signature_bytes = bytes_from_b64(signature)?;
         let signature = Signature::from_bytes(&signature_bytes);
-        self.0.verify_strict(&message, &signature)?;
+        self.0.verify_strict(message, &signature)?;
 
         Ok(())
     }
