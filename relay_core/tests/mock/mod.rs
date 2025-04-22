@@ -64,7 +64,7 @@ impl MockRelay {
             .try_trust(self.trusted_keys.clone())
             .map_err(|e| MockReceivePayloadError::CannotTrustPayload(e))?;
         self.mailroom
-            .receive_payload_at_time(verified_payload, at)
+            .receive_payload_at_time(&verified_payload, at)
             .map_err(|e| MockReceivePayloadError::CannotReceiveInMailroom(e))?;
         Ok(())
     }
