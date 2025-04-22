@@ -94,16 +94,15 @@ pub async fn send_to_listeners<L, A, E>(
                                 .try_trust(config.trusted_public_keys())
                                 .map_err(|_| Event::SenderReceivedBadResponse(relay.clone()))?;
 
-                            let envelopes = trusted_payload.envelopes().clone();
-
                             match mailroom
                                 .lock()
                                 .await
-                                .receive_payload_at_time(trusted_payload, now)
+                                .receive_payload_at_time(&trusted_payload, now)
                             {
-                                Ok(()) => {
-                                    Ok(Event::SenderReceivedFromListener(relay.clone(), envelopes))
-                                }
+                                Ok(()) => Ok(Event::SenderReceivedFromListener(
+                                    relay.clone(),
+                                    trusted_payload.envelopes().clone(),
+                                )),
                                 Err(ReceivePayloadError::AlreadyReceivedFromKey) => {
                                     Ok(Event::SenderAlreadyReceivedFromListener(relay.clone()))
                                 }
@@ -177,22 +176,21 @@ where
         .find(|relay| relay.key.to_string() == trusted_payload.certificate().key)
         .cloned();
 
-    // todo: mailroom shouldn't be eating the trusted payload or we should be able to clone it but this suuucks
-    let envelopes = trusted_payload.envelopes().clone();
-    let from_key = trusted_payload.public_key().clone();
-
     let mut mailroom = mailroom.lock().await;
 
-    match mailroom.receive_payload_at_time(trusted_payload, now) {
+    match mailroom.receive_payload_at_time(&trusted_payload, now) {
         Ok(()) => {
             event::emit_event(
                 &event_handler,
-                Event::ListenerReceivedFromSender(relay_data, envelopes),
+                Event::ListenerReceivedFromSender(relay_data, trusted_payload.envelopes().clone()),
             )
             .await;
 
-            let outgoing_envelopes =
-                mailroom.get_outgoing_at_time(&from_key, create_ttl_config(&config), now);
+            let outgoing_envelopes = mailroom.get_outgoing_at_time(
+                &trusted_payload.public_key(),
+                create_ttl_config(&config),
+                now,
+            );
 
             Ok(outgoing_envelopes.create_payload())
         }

@@ -81,23 +81,22 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         mailroom
     }
 
-    pub fn receive_payload(&mut self, payload: TrustedPayload) -> Result<(), ReceivePayloadError> {
+    pub fn receive_payload(&mut self, payload: &TrustedPayload) -> Result<(), ReceivePayloadError> {
         self.receive_payload_internal(payload, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
     pub fn receive_payload_at_time(
         &mut self,
-        payload: TrustedPayload,
+        payload: &TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), ReceivePayloadError> {
         self.receive_payload_internal(payload, now)
     }
 
-    // todo: this should probably just receive a reference to TrustedPayload
     fn receive_payload_internal(
         &mut self,
-        payload: TrustedPayload,
+        payload: &TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), ReceivePayloadError> {
         self.handle_time(now);
@@ -111,7 +110,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
 
         let mut forwarding_from_this_key = vec![];
 
-        for envelope in payload.envelopes {
+        for envelope in &payload.envelopes {
             if self.new_messages.contains(&envelope.message) {
                 forwarding_from_this_key.push(envelope.clone());
             } else if !self.archive.is_message_in_archive(&envelope.message) {
