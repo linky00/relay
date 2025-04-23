@@ -55,7 +55,8 @@ pub async fn send_to_listeners<L, E>(
                 {
                     Ok(outgoing_envelopes) => outgoing_envelopes,
                     Err(error) => {
-                        event::emit_event(&event_handler, Event::SenderDBError(error.to_string()));
+                        event::emit_event(&event_handler, Event::SenderDBError(error.to_string()))
+                            .await;
                         return;
                     }
                 };
@@ -208,7 +209,8 @@ where
             match outgoing_envelopes.await {
                 Ok(outgoing_envelopes) => Ok(outgoing_envelopes.create_payload()),
                 Err(error) => {
-                    event::emit_event(&event_handler, Event::ListenerDBError(error.to_string()));
+                    event::emit_event(&event_handler, Event::ListenerDBError(error.to_string()))
+                        .await;
                     Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "db error sorry".to_owned(),
@@ -228,7 +230,7 @@ where
             ))
         }
         Err(MailroomError::ArchiveFailure(error)) => {
-            event::emit_event(&event_handler, Event::ListenerDBError(error.to_string()));
+            event::emit_event(&event_handler, Event::ListenerDBError(error.to_string())).await;
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "db error sorry".to_owned(),
