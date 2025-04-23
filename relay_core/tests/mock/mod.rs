@@ -1,4 +1,7 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use chrono::{DateTime, Utc};
 use relay_core::{
@@ -20,16 +23,16 @@ pub struct MockRelay {
     mailroom: Mailroom<MockLineGenerator, MockArchive, ()>,
     trusted_keys: HashSet<PublicKey>,
     #[allow(dead_code)]
-    envelopes: Rc<RefCell<Vec<Envelope>>>,
-    messages: Rc<RefCell<HashSet<Message>>>,
+    envelopes: Arc<Mutex<Vec<Envelope>>>,
+    messages: Arc<Mutex<HashSet<Message>>>,
 }
 
 impl MockRelay {
     pub fn new(name: &str) -> Self {
         let secret_key = SecretKey::generate();
 
-        let envelopes = Rc::new(RefCell::new(vec![]));
-        let messages = Rc::new(RefCell::new(HashSet::new()));
+        let envelopes = Arc::new(Mutex::new(vec![]));
+        let messages = Arc::new(Mutex::new(HashSet::new()));
 
         MockRelay {
             public_key: secret_key.public_key(),
@@ -38,8 +41,8 @@ impl MockRelay {
                     name: name.to_owned(),
                 },
                 MockArchive {
-                    envelopes: Rc::clone(&envelopes),
-                    messages: Rc::clone(&messages),
+                    envelopes: Arc::clone(&envelopes),
+                    messages: Arc::clone(&messages),
                 },
                 secret_key,
             ),
@@ -53,7 +56,7 @@ impl MockRelay {
         self.trusted_keys.insert(key);
     }
 
-    pub fn receive_payload(
+    pub async fn receive_payload(
         &mut self,
         payload: &str,
         at: DateTime<Utc>,
@@ -65,21 +68,24 @@ impl MockRelay {
             .map_err(|e| MockReceivePayloadError::CannotTrustPayload(e))?;
         self.mailroom
             .receive_payload_at_time(&verified_payload, at)
+            .await
             .map_err(|e| MockReceivePayloadError::CannotReceiveInMailroom(e))?;
         Ok(())
     }
 
-    pub fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
+    pub async fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
         let outgoing_envelopes = self
             .mailroom
             .get_outgoing_at_time(&for_key, TTLConfig::default(), at)
+            .await
             .unwrap();
         outgoing_envelopes.create_payload()
     }
 
     pub fn has_message_with_line(&self, line: &str) -> bool {
         self.messages
-            .borrow()
+            .lock()
+            .unwrap()
             .iter()
             .any(|message| message.contents.line == line)
     }
@@ -106,20 +112,23 @@ impl GetNextLine for MockLineGenerator {
 }
 
 struct MockArchive {
-    envelopes: Rc<RefCell<Vec<Envelope>>>,
-    messages: Rc<RefCell<HashSet<Message>>>,
+    envelopes: Arc<Mutex<Vec<Envelope>>>,
+    messages: Arc<Mutex<HashSet<Message>>>,
 }
 
 impl Archive for MockArchive {
     type Error = ();
 
-    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
-        self.envelopes.borrow_mut().push(envelope.clone());
-        self.messages.borrow_mut().insert(envelope.message.clone());
+    async fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
+        self.envelopes.lock().unwrap().push(envelope.clone());
+        self.messages
+            .lock()
+            .unwrap()
+            .insert(envelope.message.clone());
         Ok(())
     }
 
-    fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
-        Ok(self.messages.borrow().contains(message))
+    async fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
+        Ok(self.messages.lock().unwrap().contains(message))
     }
 }
