@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use archive::MockArchive;
+use archive::{DBArchive, DBError};
 use axum::{Router, extract::State, response::IntoResponse, routing};
 use chrono::{DateTime, Timelike, Utc};
 use relay_core::{
@@ -21,6 +21,8 @@ mod exchange;
 
 #[derive(Error, Debug)]
 pub enum DaemonError {
+    #[error("cannot start db connection")]
+    CannotConnectToDB,
     #[error("cannot read config")]
     CannotReadConfig,
     #[error("cannot bind port {0} (is it in use?)")]
@@ -40,32 +42,45 @@ where
     C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
-    pub fn new(
+    pub async fn new(
         line_generator: L,
-        secret_key: SecretKey,
         config_reader: C,
         event_handler: E,
-    ) -> Self {
-        Self {
-            state: Arc::new(DaemonState::new(
-                line_generator,
-                secret_key,
-                config_reader,
-                event_handler,
-            )),
+        secret_key: SecretKey,
+        db_url: &str,
+    ) -> Result<Self, DaemonError> {
+        Ok(Self {
+            state: Arc::new(
+                DaemonState::new(
+                    line_generator,
+                    config_reader,
+                    event_handler,
+                    secret_key,
+                    db_url,
+                )
+                .await?,
+            ),
             fast_mode: false,
-        }
+        })
     }
 
-    pub fn new_fast(
+    pub async fn new_fast(
         line_generator: L,
-        secret_key: SecretKey,
         config_reader: C,
         event_handler: E,
-    ) -> Self {
-        let mut daemon = Self::new(line_generator, secret_key, config_reader, event_handler);
+        secret_key: SecretKey,
+        db_url: &str,
+    ) -> Result<Self, DaemonError> {
+        let mut daemon = Self::new(
+            line_generator,
+            config_reader,
+            event_handler,
+            secret_key,
+            db_url,
+        )
+        .await?;
         daemon.fast_mode = true;
-        daemon
+        Ok(daemon)
     }
 
     pub async fn start(&self) -> Result<(), DaemonError> {
@@ -157,7 +172,7 @@ where
 }
 
 struct DaemonState<L: GetNextLine, C, E> {
-    mailroom: Arc<Mutex<Mailroom<L, MockArchive>>>,
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
     config_reader: Arc<C>,
     event_handler: Arc<Mutex<E>>,
 }
@@ -168,7 +183,13 @@ where
     C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
-    fn new(line_generator: L, secret_key: SecretKey, config_reader: C, event_handler: E) -> Self {
+    async fn new(
+        line_generator: L,
+        config_reader: C,
+        event_handler: E,
+        secret_key: SecretKey,
+        db_url: &str,
+    ) -> Result<Self, DaemonError> {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
                 .with_second(datetime.second() / 5 * 5)
@@ -178,16 +199,20 @@ where
         };
         let interval = Duration::from_secs(5);
 
-        Self {
+        let db_archive = DBArchive::new(db_url)
+            .await
+            .map_err(|_| DaemonError::CannotConnectToDB)?;
+
+        Ok(Self {
             mailroom: Arc::new(Mutex::new(Mailroom::new_with_custom_time(
                 line_generator,
-                MockArchive::new(),
+                db_archive,
                 secret_key,
                 flatten_time,
                 interval,
             ))),
             config_reader: Arc::new(config_reader),
             event_handler: Arc::new(Mutex::new(event_handler)),
-        }
+        })
     }
 }

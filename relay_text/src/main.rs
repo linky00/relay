@@ -32,10 +32,13 @@ async fn main() {
 
     let relay_daemon = Daemon::new_fast(
         IncreasingLine::new("me"),
-        secret_key,
         text_config,
         EventPrinter,
-    );
+        secret_key,
+        "sqlite://relay.db",
+    )
+    .await
+    .unwrap();
     relay_daemon.start().await.unwrap();
 
     tokio::signal::ctrl_c()
@@ -104,6 +107,9 @@ impl HandleEvent for EventPrinter {
             Event::ListenerReceivedFromUntrustedSender => {
                 println!("listener received from untrusted sender");
             }
+            Event::ListenerDBError(error) => {
+                println!("listener had db error: {error}");
+            }
             Event::ListenerAlreadyReceivedFromSender(relay_data) => {
                 println!(
                     "listener already received from sender relay {}",
@@ -115,6 +121,9 @@ impl HandleEvent for EventPrinter {
             }
             Event::SenderBeginningRun => {
                 println!("sender beginning run");
+            }
+            Event::SenderDBError(error) => {
+                println!("sender had db error: {error}");
             }
             Event::SenderSentToListener(relay, envelopes) => {
                 println!(

@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use chrono::{DateTime, Utc};
 use relay_core::{
     crypto::{PublicKey, SecretKey},
-    mailroom::{Archive, GetNextLine, Line, Mailroom, ReceivePayloadError, TTLConfig},
+    mailroom::{Archive, GetNextLine, Line, Mailroom, MailroomError, TTLConfig},
     message::{Envelope, Message},
     payload::{UntrustedPayload, UntrustedPayloadError},
 };
@@ -12,12 +12,12 @@ use relay_core::{
 pub enum MockReceivePayloadError {
     CannotReadPayload(UntrustedPayloadError),
     CannotTrustPayload(UntrustedPayloadError),
-    CannotReceiveInMailroom(ReceivePayloadError),
+    CannotReceiveInMailroom(MailroomError<()>),
 }
 
 pub struct MockRelay {
     pub public_key: PublicKey,
-    mailroom: Mailroom<MockLineGenerator, MockArchive>,
+    mailroom: Mailroom<MockLineGenerator, MockArchive, ()>,
     trusted_keys: HashSet<PublicKey>,
     #[allow(dead_code)]
     envelopes: Rc<RefCell<Vec<Envelope>>>,
@@ -70,9 +70,10 @@ impl MockRelay {
     }
 
     pub fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
-        let outgoing_envelopes =
-            self.mailroom
-                .get_outgoing_at_time(&for_key, TTLConfig::default(), at);
+        let outgoing_envelopes = self
+            .mailroom
+            .get_outgoing_at_time(&for_key, TTLConfig::default(), at)
+            .unwrap();
         outgoing_envelopes.create_payload()
     }
 
@@ -110,12 +111,15 @@ struct MockArchive {
 }
 
 impl Archive for MockArchive {
-    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) {
+    type Error = ();
+
+    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
         self.envelopes.borrow_mut().push(envelope.clone());
         self.messages.borrow_mut().insert(envelope.message.clone());
+        Ok(())
     }
 
-    fn is_message_in_archive(&self, message: &Message) -> bool {
-        self.messages.borrow().contains(message)
+    fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
+        Ok(self.messages.borrow().contains(message))
     }
 }

@@ -17,12 +17,14 @@ const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
 const HOUR_IN_SECONDS: u64 = 60 * 60;
 
 #[derive(Error, Debug)]
-pub enum ReceivePayloadError {
+pub enum MailroomError<E> {
     #[error("already received payload from this key")]
     AlreadyReceivedFromKey,
+    #[error("{0}")]
+    ArchiveFailure(E),
 }
 
-pub struct Mailroom<L: GetNextLine, A: Archive> {
+pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
     line_generator: L,
     archive: A,
     secret_key: SecretKey,
@@ -35,7 +37,7 @@ pub struct Mailroom<L: GetNextLine, A: Archive> {
     last_seen_time: Option<DateTime<Utc>>,
 }
 
-impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
+impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
     pub fn new(line_generator: L, archive: A, secret_key: SecretKey) -> Self {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
@@ -72,7 +74,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         secret_key: SecretKey,
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
-    ) -> Mailroom<L, A> {
+    ) -> Mailroom<L, A, E> {
         let mut mailroom = Self::new(line_generator, archive, secret_key);
 
         mailroom.flatten_time = flatten_time;
@@ -81,7 +83,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         mailroom
     }
 
-    pub fn receive_payload(&mut self, payload: &TrustedPayload) -> Result<(), ReceivePayloadError> {
+    pub fn receive_payload(&mut self, payload: &TrustedPayload) -> Result<(), MailroomError<E>> {
         self.receive_payload_internal(payload, Utc::now())
     }
 
@@ -90,7 +92,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         &mut self,
         payload: &TrustedPayload,
         now: DateTime<Utc>,
-    ) -> Result<(), ReceivePayloadError> {
+    ) -> Result<(), MailroomError<E>> {
         self.receive_payload_internal(payload, now)
     }
 
@@ -98,14 +100,14 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         &mut self,
         payload: &TrustedPayload,
         now: DateTime<Utc>,
-    ) -> Result<(), ReceivePayloadError> {
+    ) -> Result<(), MailroomError<E>> {
         self.handle_time(now);
 
         if self
             .forwarding_received_this_hour
             .contains_key(&payload.public_key)
         {
-            return Err(ReceivePayloadError::AlreadyReceivedFromKey);
+            return Err(MailroomError::AlreadyReceivedFromKey);
         }
 
         let mut forwarding_from_this_key = vec![];
@@ -113,13 +115,18 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         for envelope in &payload.envelopes {
             if self.new_messages.contains(&envelope.message) {
                 forwarding_from_this_key.push(envelope.clone());
-            } else if !self.archive.is_message_in_archive(&envelope.message) {
+            } else if !self
+                .archive
+                .is_message_in_archive(&envelope.message)
+                .map_err(|e| MailroomError::ArchiveFailure(e))?
+            {
                 self.new_messages.insert(envelope.message.clone());
                 forwarding_from_this_key.push(envelope.clone());
             }
 
             self.archive
-                .add_envelope_to_archive(&payload.certificate.key, &envelope);
+                .add_envelope_to_archive(&payload.certificate.key, envelope)
+                .map_err(|e| MailroomError::ArchiveFailure(e))?;
         }
 
         self.forwarding_received_this_hour
@@ -132,7 +139,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         &mut self,
         sending_to: &PublicKey,
         ttl_config: TTLConfig,
-    ) -> OutgoingEnvelopes {
+    ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.get_outgoing_internal(sending_to, ttl_config, Utc::now())
     }
 
@@ -142,7 +149,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         sending_to: &PublicKey,
         ttl_config: TTLConfig,
         now: DateTime<Utc>,
-    ) -> OutgoingEnvelopes {
+    ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.get_outgoing_internal(sending_to, ttl_config, now)
     }
 
@@ -151,7 +158,7 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
         sending_to: &PublicKey,
         ttl_config: TTLConfig,
         now: DateTime<Utc>,
-    ) -> OutgoingEnvelopes {
+    ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.handle_time(now);
 
         let mut sending_envelopes: Vec<Envelope> = self
@@ -177,15 +184,16 @@ impl<L: GetNextLine, A: Archive> Mailroom<L, A> {
             };
 
             self.archive
-                .add_envelope_to_archive(&envelope.message.certificate.key, &envelope);
+                .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
+                .map_err(|e| MailroomError::ArchiveFailure(e))?;
 
             sending_envelopes.push(envelope);
         }
 
-        OutgoingEnvelopes {
+        Ok(OutgoingEnvelopes {
             envelopes: sending_envelopes,
             secret_key: self.secret_key.clone(),
-        }
+        })
     }
 
     fn handle_time(&mut self, now: DateTime<Utc>) {
@@ -279,7 +287,13 @@ pub trait GetNextLine {
 }
 
 pub trait Archive {
-    fn is_message_in_archive(&self, message: &Message) -> bool;
+    type Error;
 
-    fn add_envelope_to_archive(&mut self, from: &str, envelope: &Envelope);
+    fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error>;
+
+    fn add_envelope_to_archive(
+        &mut self,
+        from: &str,
+        envelope: &Envelope,
+    ) -> Result<(), Self::Error>;
 }

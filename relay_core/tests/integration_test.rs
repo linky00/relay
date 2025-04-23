@@ -3,9 +3,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use mock::{MockReceivePayloadError, MockRelay};
-use relay_core::{
-    crypto::SecretKey, mailroom::ReceivePayloadError, payload::UntrustedPayloadError,
-};
+use relay_core::{crypto::SecretKey, mailroom::MailroomError, payload::UntrustedPayloadError};
 
 mod mock;
 
@@ -71,7 +69,7 @@ fn reject_already_received_this_hour() {
     assert!(matches!(
         send_payload(&mut relay_a, &mut relay_b, now),
         Err(MockReceivePayloadError::CannotReceiveInMailroom(
-            ReceivePayloadError::AlreadyReceivedFromKey
+            MailroomError::AlreadyReceivedFromKey
         ))
     ));
 }

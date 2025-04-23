@@ -1,31 +1,17 @@
-use std::collections::HashSet;
+use relay_core::mailroom::Archive;
+use sqlx::{Sqlite, migrate::MigrateDatabase};
+use thiserror::Error;
 
-use relay_core::{
-    mailroom::Archive,
-    message::{Envelope, Message},
-};
+#[derive(Error, Debug)]
+#[error("database operation failed")]
+pub(crate) struct DBError;
 
-pub(crate) struct MockArchive {
-    envelopes: Vec<Envelope>,
-    messages: HashSet<Message>,
+pub(crate) struct DBArchive {}
+
+impl DBArchive {
+    pub(crate) async fn new(db_url: &str) -> Result<Self, DBError> {}
 }
 
-impl MockArchive {
-    pub(crate) fn new() -> Self {
-        Self {
-            envelopes: vec![],
-            messages: HashSet::new(),
-        }
-    }
-}
-
-impl Archive for MockArchive {
-    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) {
-        self.envelopes.push(envelope.clone());
-        self.messages.insert(envelope.message.clone());
-    }
-
-    fn is_message_in_archive(&self, message: &Message) -> bool {
-        self.messages.contains(message)
-    }
+impl Archive for DBArchive {
+    type Error = DBError;
 }
