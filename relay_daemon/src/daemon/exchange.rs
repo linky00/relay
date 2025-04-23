@@ -51,6 +51,7 @@ pub async fn send_to_listeners<L, E>(
                     .lock()
                     .await
                     .get_outgoing_at_time(&relay.key, ttl_config, now)
+                    .await
                 {
                     Ok(outgoing_envelopes) => outgoing_envelopes,
                     Err(error) => {
@@ -104,6 +105,7 @@ pub async fn send_to_listeners<L, E>(
                                 .lock()
                                 .await
                                 .receive_payload_at_time(&trusted_payload, now)
+                                .await
                             {
                                 Ok(()) => Ok(Event::SenderReceivedFromListener(
                                     relay.clone(),
@@ -186,7 +188,10 @@ where
 
     let mut mailroom = mailroom.lock().await;
 
-    match mailroom.receive_payload_at_time(&trusted_payload, now) {
+    match mailroom
+        .receive_payload_at_time(&trusted_payload, now)
+        .await
+    {
         Ok(()) => {
             event::emit_event(
                 &event_handler,
@@ -200,7 +205,7 @@ where
                 now,
             );
 
-            match outgoing_envelopes {
+            match outgoing_envelopes.await {
                 Ok(outgoing_envelopes) => Ok(outgoing_envelopes.create_payload()),
                 Err(error) => {
                     event::emit_event(&event_handler, Event::ListenerDBError(error.to_string()));
