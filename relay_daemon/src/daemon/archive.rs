@@ -30,13 +30,15 @@ pub(crate) struct DBArchive<E: HandleEvent> {
 
 impl<E: HandleEvent> DBArchive<E> {
     pub(crate) async fn new(db_url: &str, event_handler: Arc<Mutex<E>>) -> Result<Self, DBError> {
-        if !Sqlite::database_exists(db_url).await.unwrap_or(false) {
-            Sqlite::create_database(db_url)
+        let db_url = format!("sqlite:{db_url}");
+
+        if !Sqlite::database_exists(&db_url).await.unwrap_or(false) {
+            Sqlite::create_database(&db_url)
                 .await
                 .map_err(|e| DBError::Create(e))?;
         }
 
-        let pool = SqlitePool::connect(db_url)
+        let pool = SqlitePool::connect(&db_url)
             .await
             .map_err(|e| DBError::Connect(e))?;
 

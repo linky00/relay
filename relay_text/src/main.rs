@@ -5,7 +5,7 @@ use relay_core::{
     mailroom::{GetNextLine, NextLine},
 };
 use relay_daemon::{
-    config::{Config, GetConfig, ListenerConfig, RelayData},
+    config::{DaemonConfig, RelayData},
     daemon::Daemon,
     event::{Event, HandleEvent},
 };
@@ -16,7 +16,7 @@ async fn main() {
 
     let secret_key = SecretKey::generate();
 
-    let text_config = TextConfig(Config {
+    let daemon_config = DaemonConfig {
         trusted_relays: vec![
             RelayData::new(
                 SecretKey::generate().public_key(),
@@ -27,19 +27,21 @@ async fn main() {
         ],
         custom_initial_ttl: None,
         custom_max_forwarding_ttl: None,
-        listener_config: Some(ListenerConfig { custom_port: None }),
-    });
+    };
 
     let relay_daemon = Daemon::new_fast(
         IncreasingLine::new("me"),
-        text_config,
         EventPrinter,
         secret_key,
-        &format!("sqlite:{}", env::var("ARCHIVE_DB").unwrap()),
+        &env::var("ARCHIVE_DB").unwrap(),
+        daemon_config,
     )
     .await
     .unwrap();
-    relay_daemon.start().await.unwrap();
+
+    relay_daemon.start_sender().await.unwrap();
+
+    relay_daemon.start_listener(None).await.unwrap();
 
     tokio::signal::ctrl_c()
         .await
@@ -69,14 +71,6 @@ impl GetNextLine for IncreasingLine {
             line: text,
             author: self.author.clone(),
         })
-    }
-}
-
-struct TextConfig(Config);
-
-impl GetConfig for TextConfig {
-    fn get(&self) -> Option<&Config> {
-        Some(&self.0)
     }
 }
 

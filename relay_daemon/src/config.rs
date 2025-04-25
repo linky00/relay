@@ -4,20 +4,14 @@ use relay_core::crypto::PublicKey;
 use reqwest::Url;
 use thiserror::Error;
 
-// todo: figure out what i'm doing with 'config that can change while running'.
-//       maybe dump the idea, or maybe have the library user call some function to say when the
-//       config has been updated. similar question is if i'll have some way of storing forwarding
-//       messages between restarts. kind of annoying, but an hour is a long time.
-
 #[derive(Clone)]
-pub struct Config {
+pub struct DaemonConfig {
     pub trusted_relays: Vec<RelayData>,
     pub custom_initial_ttl: Option<u8>,
     pub custom_max_forwarding_ttl: Option<u8>,
-    pub listener_config: Option<ListenerConfig>,
 }
 
-impl Config {
+impl DaemonConfig {
     pub(crate) fn trusted_public_keys(&self) -> Vec<PublicKey> {
         self.trusted_relays.iter().map(|relay| relay.key).collect()
     }
@@ -58,8 +52,4 @@ impl RelayData {
             listener_endpoint: endpoint,
         })
     }
-}
-
-pub trait GetConfig {
-    fn get(&self) -> Option<&Config>;
 }

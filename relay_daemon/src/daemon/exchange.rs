@@ -11,7 +11,7 @@ use reqwest::{Client, header::CONTENT_TYPE};
 use tokio::sync::Mutex;
 
 use crate::{
-    config::{Config, GetConfig},
+    config::DaemonConfig,
     event::{self, Event, HandleEvent},
 };
 
@@ -19,7 +19,7 @@ use super::archive::{DBArchive, DBError};
 
 pub async fn send_to_listeners<L, E>(
     mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
-    config: &Config,
+    config: &DaemonConfig,
     event_handler: Arc<Mutex<E>>,
 ) where
     L: GetNextLine + Send + 'static,
@@ -141,28 +141,17 @@ pub async fn send_to_listeners<L, E>(
     event::emit_event(&event_handler, Event::SenderFinishedRun).await;
 }
 
-pub async fn respond_to_sender<L, C, E>(
+pub async fn respond_to_sender<L, E>(
     payload: &str,
     mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
-    config_reader: Arc<C>,
+    config: &DaemonConfig,
     event_handler: Arc<Mutex<E>>,
 ) -> Result<String, (StatusCode, String)>
 where
     L: GetNextLine,
-    C: GetConfig,
     E: HandleEvent + Send + 'static,
 {
     let now = Utc::now();
-
-    // todo: config code smell eww
-    let config = {
-        match config_reader.get() {
-            Some(config) => config.clone(),
-            None => {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, "sorry".to_owned()));
-            }
-        }
-    };
 
     let trusted_payload = match UntrustedPayload::from_json(payload) {
         Ok(untrusted_payload) => match untrusted_payload.try_trust(config.trusted_public_keys()) {
@@ -239,6 +228,6 @@ where
     }
 }
 
-fn create_ttl_config(config: &Config) -> TTLConfig {
+fn create_ttl_config(config: &DaemonConfig) -> TTLConfig {
     TTLConfig::new(config.custom_initial_ttl, config.custom_max_forwarding_ttl)
 }

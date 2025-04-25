@@ -12,7 +12,7 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{
-    config::GetConfig,
+    config::DaemonConfig,
     event::{self, Event, HandleEvent},
 };
 
@@ -23,46 +23,36 @@ mod exchange;
 pub enum DaemonError {
     #[error("cannot start db connection")]
     CannotConnectToDB,
-    #[error("cannot read config")]
-    CannotReadConfig,
     #[error("cannot bind port {0} (is it in use?)")]
     CannotBindPort(u16),
     #[error("cannot start sender for some reason")]
     CannotStartSender,
 }
 
-pub struct Daemon<L, C, E>
+pub struct Daemon<L, E>
 where
     L: GetNextLine,
     E: HandleEvent + Send + 'static,
 {
-    state: Arc<DaemonState<L, C, E>>,
+    state: Arc<DaemonState<L, E>>,
     fast_mode: bool,
 }
 
-impl<L, C, E> Daemon<L, C, E>
+impl<L, E> Daemon<L, E>
 where
     L: GetNextLine + Sync + Send + 'static,
-    C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
     pub async fn new(
         line_generator: L,
-        config_reader: C,
         event_handler: E,
         secret_key: SecretKey,
         db_url: &str,
+        config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
         Ok(Self {
             state: Arc::new(
-                DaemonState::new(
-                    line_generator,
-                    config_reader,
-                    event_handler,
-                    secret_key,
-                    db_url,
-                )
-                .await?,
+                DaemonState::new(line_generator, event_handler, secret_key, db_url, config).await?,
             ),
             fast_mode: false,
         })
@@ -70,56 +60,18 @@ where
 
     pub async fn new_fast(
         line_generator: L,
-        config_reader: C,
         event_handler: E,
         secret_key: SecretKey,
         db_url: &str,
+        config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
-        let mut daemon = Self::new(
-            line_generator,
-            config_reader,
-            event_handler,
-            secret_key,
-            db_url,
-        )
-        .await?;
+        let mut daemon =
+            Self::new(line_generator, event_handler, secret_key, db_url, config).await?;
         daemon.fast_mode = true;
         Ok(daemon)
     }
 
-    pub async fn start(&self) -> Result<(), DaemonError> {
-        let config = self
-            .state
-            .config_reader
-            .get()
-            .ok_or(DaemonError::CannotReadConfig)?;
-
-        if let Some(listener_config) = &config.listener_config {
-            let state = Arc::clone(&self.state);
-            let router = Router::new()
-                .route("/", routing::post(Self::handle_request))
-                .with_state(state);
-
-            let port = listener_config.custom_port.unwrap_or(7070);
-            let address = format!("0.0.0.0:{}", port);
-
-            let listener = TcpListener::bind(address)
-                .await
-                .map_err(|_| DaemonError::CannotBindPort(port))?;
-
-            tokio::spawn(async {
-                axum::serve(listener, router.into_make_service())
-                    .await
-                    .expect("should run indefinitely");
-            });
-
-            event::emit_event(
-                &self.state.event_handler,
-                Event::ListenerStartedListening(port),
-            )
-            .await;
-        }
-
+    pub async fn start_sender(&self) -> Result<(), DaemonError> {
         let scheduler = JobScheduler::new()
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
@@ -135,14 +87,12 @@ where
                     move |_, _| {
                         let state = Arc::clone(&state);
                         Box::pin(async move {
-                            if let Some(config) = state.config_reader.get() {
-                                exchange::send_to_listeners(
-                                    Arc::clone(&state.mailroom),
-                                    config,
-                                    Arc::clone(&state.event_handler),
-                                )
-                                .await;
-                            }
+                            exchange::send_to_listeners(
+                                Arc::clone(&state.mailroom),
+                                &state.config,
+                                Arc::clone(&state.event_handler),
+                            )
+                            .await;
                         })
                     },
                 )
@@ -161,42 +111,69 @@ where
         Ok(())
     }
 
+    pub async fn start_listener(&self, custom_port: Option<u16>) -> Result<(), DaemonError> {
+        let state = Arc::clone(&self.state);
+        let router = Router::new()
+            .route("/", routing::post(Self::handle_request))
+            .with_state(state);
+
+        let port = custom_port.unwrap_or(7070);
+        let address = format!("0.0.0.0:{}", port);
+
+        let listener = TcpListener::bind(address)
+            .await
+            .map_err(|_| DaemonError::CannotBindPort(port))?;
+
+        tokio::spawn(async {
+            axum::serve(listener, router.into_make_service())
+                .await
+                .expect("should run indefinitely");
+        });
+
+        event::emit_event(
+            &self.state.event_handler,
+            Event::ListenerStartedListening(port),
+        )
+        .await;
+
+        Ok(())
+    }
+
     async fn handle_request(
-        State(state): State<Arc<DaemonState<L, C, E>>>,
+        State(state): State<Arc<DaemonState<L, E>>>,
         body: String,
     ) -> impl IntoResponse {
         exchange::respond_to_sender(
             &body,
             Arc::clone(&state.mailroom),
-            Arc::clone(&state.config_reader),
+            &state.config,
             Arc::clone(&state.event_handler),
         )
         .await
     }
 }
 
-struct DaemonState<L, C, E>
+struct DaemonState<L, E>
 where
     L: GetNextLine,
     E: HandleEvent + Send + 'static,
 {
     mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
-    config_reader: Arc<C>,
     event_handler: Arc<Mutex<E>>,
+    config: DaemonConfig,
 }
 
-impl<L, C, E> DaemonState<L, C, E>
+impl<L, E> DaemonState<L, E>
 where
     L: GetNextLine + Sync + Send + 'static,
-    C: GetConfig + Sync + Send + 'static,
     E: HandleEvent + Sync + Send + 'static,
 {
     async fn new(
         line_generator: L,
-        config_reader: C,
         event_handler: E,
         secret_key: SecretKey,
         db_url: &str,
+        config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
@@ -221,8 +198,8 @@ where
                 flatten_time,
                 interval,
             ))),
-            config_reader: Arc::new(config_reader),
             event_handler,
+            config,
         })
     }
 }
