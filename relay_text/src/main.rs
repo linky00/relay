@@ -163,7 +163,7 @@ impl HandleEvent for EventPrinter {
                 println!("sender finished run");
             }
             Event::AddedMessageToArchive(message) => {
-                println!("adding message to archive: {}", message.contents.line)
+                println!("adding message to archive: \"{}\"", message.contents.line)
             }
         }
     }
