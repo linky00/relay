@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use relay_core::message::Envelope;
+use relay_core::message::{Envelope, Message};
 use tokio::sync::Mutex;
 
 use crate::config::RelayData;
@@ -22,6 +22,7 @@ pub enum Event {
     SenderReceivedBadResponse(RelayData),
     SenderAlreadyReceivedFromListener(RelayData),
     SenderFinishedRun,
+    AddedMessageToArchive(Message),
 }
 
 pub trait HandleEvent {

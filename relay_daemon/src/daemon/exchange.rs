@@ -18,7 +18,7 @@ use crate::{
 use super::archive::{DBArchive, DBError};
 
 pub async fn send_to_listeners<L, E>(
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
     config: &Config,
     event_handler: Arc<Mutex<E>>,
 ) where
@@ -143,7 +143,7 @@ pub async fn send_to_listeners<L, E>(
 
 pub async fn respond_to_sender<L, C, E>(
     payload: &str,
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
     config_reader: Arc<C>,
     event_handler: Arc<Mutex<E>>,
 ) -> Result<String, (StatusCode, String)>

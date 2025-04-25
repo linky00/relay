@@ -31,7 +31,11 @@ pub enum DaemonError {
     CannotStartSender,
 }
 
-pub struct Daemon<L: GetNextLine, C, E> {
+pub struct Daemon<L, C, E>
+where
+    L: GetNextLine,
+    E: HandleEvent + Send + 'static,
+{
     state: Arc<DaemonState<L, C, E>>,
     fast_mode: bool,
 }
@@ -171,8 +175,12 @@ where
     }
 }
 
-struct DaemonState<L: GetNextLine, C, E> {
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
+struct DaemonState<L, C, E>
+where
+    L: GetNextLine,
+    E: HandleEvent + Send + 'static,
+{
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
     config_reader: Arc<C>,
     event_handler: Arc<Mutex<E>>,
 }
@@ -199,7 +207,9 @@ where
         };
         let interval = Duration::from_secs(5);
 
-        let db_archive = DBArchive::new(db_url)
+        let event_handler = Arc::new(Mutex::new(event_handler));
+
+        let db_archive = DBArchive::new(db_url, Arc::clone(&event_handler))
             .await
             .map_err(|_| DaemonError::CannotConnectToDB)?;
 
@@ -212,7 +222,7 @@ where
                 interval,
             ))),
             config_reader: Arc::new(config_reader),
-            event_handler: Arc::new(Mutex::new(event_handler)),
+            event_handler,
         })
     }
 }

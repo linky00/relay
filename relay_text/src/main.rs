@@ -2,7 +2,7 @@ use std::env;
 
 use relay_core::{
     crypto::SecretKey,
-    mailroom::{GetNextLine, Line},
+    mailroom::{GetNextLine, NextLine},
 };
 use relay_daemon::{
     config::{Config, GetConfig, ListenerConfig, RelayData},
@@ -35,7 +35,7 @@ async fn main() {
         text_config,
         EventPrinter,
         secret_key,
-        "sqlite://relay.db",
+        &format!("sqlite:{}", env::var("ARCHIVE_DB").unwrap()),
     )
     .await
     .unwrap();
@@ -61,12 +61,12 @@ impl IncreasingLine {
 }
 
 impl GetNextLine for IncreasingLine {
-    fn get_next_line(&mut self) -> Option<Line> {
+    fn get_next_line(&mut self) -> Option<NextLine> {
         self.count += 1;
         let text = format!("line {}", self.count);
         println!("generated new line: \"{text}\"");
-        Some(Line {
-            text,
+        Some(NextLine {
+            line: text,
             author: self.author.clone(),
         })
     }
@@ -167,6 +167,9 @@ impl HandleEvent for EventPrinter {
             }
             Event::SenderFinishedRun => {
                 println!("sender finished run");
+            }
+            Event::AddedMessageToArchive(message) => {
+                println!("adding message to archive: {}", message.contents.line)
             }
         }
     }

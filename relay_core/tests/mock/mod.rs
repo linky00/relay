@@ -6,7 +6,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use relay_core::{
     crypto::{PublicKey, SecretKey},
-    mailroom::{Archive, GetNextLine, Line, Mailroom, MailroomError, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, MailroomError, NextLine, TTLConfig},
     message::{Envelope, Message},
     payload::{UntrustedPayload, UntrustedPayloadError},
 };
@@ -103,9 +103,9 @@ struct MockLineGenerator {
 }
 
 impl GetNextLine for MockLineGenerator {
-    fn get_next_line(&mut self) -> Option<Line> {
-        Some(Line {
-            text: format!("{}: {}", self.name, uuid::Uuid::new_v4().hyphenated()),
+    fn get_next_line(&mut self) -> Option<NextLine> {
+        Some(NextLine {
+            line: format!("{}: {}", self.name, uuid::Uuid::new_v4().hyphenated()),
             author: self.name.clone(),
         })
     }

@@ -226,11 +226,11 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
     }
 
     fn set_new_message(&mut self) {
-        self.current_message = if let Some(line) = self.line_generator.get_next_line() {
+        self.current_message = if let Some(next_line) = self.line_generator.get_next_line() {
             let contents = MessageContents {
                 uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
-                author: line.author.clone(),
-                line: line.text.into(),
+                author: next_line.author.clone(),
+                line: next_line.line.into(),
             };
 
             let contents_json = serde_json::to_string(&contents)
@@ -285,26 +285,24 @@ impl Default for TTLConfig {
 }
 
 #[derive(Clone)]
-pub struct Line {
-    pub text: String,
+pub struct NextLine {
+    pub line: String,
     pub author: String,
 }
 
 pub trait GetNextLine {
-    fn get_next_line(&mut self) -> Option<Line>;
+    fn get_next_line(&mut self) -> Option<NextLine>;
 }
 
-pub trait Archive {
+#[trait_variant::make(Archive: Send)]
+pub trait ArchiveLocal {
     type Error;
 
-    fn is_message_in_archive(
-        &self,
-        message: &Message,
-    ) -> impl Future<Output = Result<bool, Self::Error>> + Send;
+    async fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error>;
 
-    fn add_envelope_to_archive(
+    async fn add_envelope_to_archive(
         &mut self,
         from: &str,
         envelope: &Envelope,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> Result<(), Self::Error>;
 }
