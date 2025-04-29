@@ -1664,9 +1664,11 @@ dependencies = [
 name = "relay_text"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dotenvy",
  "relay_core",
  "relay_daemon",
+ "thiserror",
  "tokio",
 ]
 
