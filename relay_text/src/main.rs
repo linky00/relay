@@ -10,8 +10,6 @@ use relay_daemon::{
     event::{Event, HandleEvent},
 };
 
-mod files;
-
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().expect("should be able to read dotenv");

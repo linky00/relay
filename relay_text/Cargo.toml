@@ -10,6 +10,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.98"
 dotenvy = "0.15.7"
+futures = "0.3.31"
+notify = "8.0.0"
+pem = "3.0.5"
 relay_core = { path = "../relay_core" }
 relay_daemon = { path = "../relay_daemon" }
 thiserror = "2.0.12"
