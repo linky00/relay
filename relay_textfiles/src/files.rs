@@ -17,7 +17,7 @@ const PUBLIC_FILE_PATH: &str = "public.txt";
 const SECRET_FILE_PATH: &str = "store/secret.pem";
 
 #[derive(Error, Debug)]
-pub enum FilesError {
+pub enum TextfilesError {
     #[error("io error: {0}")]
     IOError(#[from] io::Error),
     #[error("watcher error: {0}")]
@@ -34,15 +34,15 @@ pub enum FilesError {
     MissingSecretFile,
 }
 
-pub struct Files {
+pub struct Textfiles {
     config_path: PathBuf,
     poem_path: PathBuf,
     listen_path: PathBuf,
     secret_path: PathBuf,
 }
 
-impl Files {
-    pub fn new(dir_path: &Path) -> Result<Self, FilesError> {
+impl Textfiles {
+    pub fn new(dir_path: &Path) -> Result<Self, TextfilesError> {
         // let config_file = File::open(dir_path.join(CONFIG_FILE_PATH))
         //     .map_err(|_| FilesError::MissingConfigFile)?;
         // let poem_file =
@@ -69,12 +69,12 @@ impl Files {
             Ok(full_path)
         };
 
-        let config_path = get_existing_path(CONFIG_FILE_PATH, FilesError::MissingConfigFile)?;
-        let poem_path = get_existing_path(POEM_FILE_PATH, FilesError::MissingPoemFile)?;
-        let listen_path = get_existing_path(LISTEN_FILE_PATH, FilesError::MissingListenFile)?;
-        let secret_path = get_existing_path(SECRET_FILE_PATH, FilesError::MissingSecretFile)?;
+        let config_path = get_existing_path(CONFIG_FILE_PATH, TextfilesError::MissingConfigFile)?;
+        let poem_path = get_existing_path(POEM_FILE_PATH, TextfilesError::MissingPoemFile)?;
+        let listen_path = get_existing_path(LISTEN_FILE_PATH, TextfilesError::MissingListenFile)?;
+        let secret_path = get_existing_path(SECRET_FILE_PATH, TextfilesError::MissingSecretFile)?;
 
-        Ok(Files {
+        Ok(Textfiles {
             config_path,
             poem_path,
             listen_path,
@@ -97,11 +97,11 @@ impl Files {
         Ok(rx)
     }
 
-    pub fn init_dir(dir_path: &Path, secret_key: &SecretKey) -> Result<(), FilesError> {
+    pub fn init_dir(dir_path: &Path, secret_key: &SecretKey) -> Result<(), TextfilesError> {
         fs::create_dir_all(dir_path)?;
 
         if fs::read_dir(dir_path)?.next().is_some() {
-            return Err(FilesError::InitDirNotEmpty);
+            return Err(TextfilesError::InitDirNotEmpty);
         };
 
         fs::create_dir(dir_path.join("store"))?;

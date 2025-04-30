@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["relay_core", "relay_daemon", "relay_text"]
+members = ["relay_core", "relay_daemon", "relay_textfiles"]

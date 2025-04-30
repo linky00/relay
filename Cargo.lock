@@ -1775,7 +1775,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "relay_text"
+name = "relay_textfiles"
 version = "0.1.0"
 dependencies = [
  "anyhow",
