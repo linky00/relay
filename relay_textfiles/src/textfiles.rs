@@ -10,6 +10,8 @@ use relay_core::crypto::SecretKey;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, Receiver};
 
+use crate::config::RelaytConfig;
+
 const CONFIG_FILE_PATH: &str = "relay.toml";
 const POEM_FILE_PATH: &str = "poem.txt";
 const LISTEN_FILE_PATH: &str = "listen.txt";
@@ -22,6 +24,8 @@ pub enum TextfilesError {
     IOError(#[from] io::Error),
     #[error("watcher error: {0}")]
     NotifyError(#[from] notify::Error),
+    #[error("toml error: {0}")]
+    TomlError(#[from] toml::de::Error),
     #[error("trying to init in dir that is not empty")]
     InitDirNotEmpty,
     #[error("missing config file")]
@@ -34,6 +38,7 @@ pub enum TextfilesError {
     MissingSecretFile,
 }
 
+#[derive(Clone)]
 pub struct Textfiles {
     config_path: PathBuf,
     poem_path: PathBuf,
@@ -42,25 +47,10 @@ pub struct Textfiles {
 }
 
 impl Textfiles {
-    pub fn new(dir_path: &Path) -> Result<Self, TextfilesError> {
-        // let config_file = File::open(dir_path.join(CONFIG_FILE_PATH))
-        //     .map_err(|_| FilesError::MissingConfigFile)?;
-        // let poem_file =
-        //     File::open(dir_path.join(POEM_FILE_PATH)).map_err(|_| FilesError::MissingPoemFile)?;
-        // let listen_file = File::options()
-        //     .append(true)
-        //     .open(dir_path.join(LISTEN_FILE_PATH))
-        //     .map_err(|_| FilesError::MissingListenFile)?;
-        // let secret_file = File::open(dir_path.join(SECRET_FILE_PATH))
-        //     .map_err(|_| FilesError::MissingSecretFile)?;
-
-        // Ok(Files {
-        //     config_file,
-        //     poem_file,
-        //     listen_file,
-        //     secret_file,
-        // })
-
+    pub fn new<F>(dir_path: &Path, mut apply_new_config: F) -> Result<Self, TextfilesError>
+    where
+        F: FnMut(Result<RelaytConfig, TextfilesError>) + Send + 'static,
+    {
         let get_existing_path = |file_path, error| {
             let full_path = dir_path.join(file_path);
             if !full_path.try_exists()? {
@@ -74,12 +64,25 @@ impl Textfiles {
         let listen_path = get_existing_path(LISTEN_FILE_PATH, TextfilesError::MissingListenFile)?;
         let secret_path = get_existing_path(SECRET_FILE_PATH, TextfilesError::MissingSecretFile)?;
 
-        Ok(Textfiles {
+        let mut rx = Self::watch_file(&config_path)?;
+
+        let textfiles = Textfiles {
             config_path,
             poem_path,
             listen_path,
             secret_path,
-        })
+        };
+
+        let textfiles_clone = textfiles.clone();
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                if let Ok(_) = event {
+                    apply_new_config(textfiles_clone.read_config().into())
+                }
+            }
+        });
+
+        Ok(textfiles)
     }
 
     fn watch_file(path: &Path) -> notify::Result<Receiver<notify::Result<Event>>> {
@@ -129,5 +132,9 @@ impl Textfiles {
         )?;
 
         Ok(())
+    }
+
+    pub fn read_config(&self) -> Result<RelaytConfig, TextfilesError> {
+        Ok(toml::from_str(&fs::read_to_string(&self.config_path)?)?)
     }
 }

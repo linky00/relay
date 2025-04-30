@@ -2,7 +2,7 @@ use relay_daemon::config::RelayData;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-struct RelaytConfig {
+pub struct RelaytConfig {
     name: String,
     is_listener: bool,
     trusted_relays: Vec<RelayData>,
