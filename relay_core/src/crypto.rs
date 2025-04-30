@@ -5,6 +5,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey, ed25519::signature::SignerMut};
 use json_syntax::{Print, Value};
 use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize, de};
 use thiserror::Error;
 
 pub const PUBLIC_KEY_LENGTH: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
@@ -51,6 +52,25 @@ impl PublicKey {
     }
 }
 
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let key_string = String::deserialize(deserializer)?;
+        Ok(PublicKey::new_from_b64(&key_string).map_err(de::Error::custom)?)
+    }
+}
+
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", b64_from_bytes(self.as_bytes()))
@@ -89,6 +109,25 @@ impl SecretKey {
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", b64_from_bytes(self.as_bytes()))
+    }
+}
+
+impl Serialize for SecretKey {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let key_string = String::deserialize(deserializer)?;
+        Ok(SecretKey::new_from_b64(&key_string).map_err(de::Error::custom)?)
     }
 }
 

@@ -1768,6 +1768,7 @@ dependencies = [
  "futures",
  "relay_core",
  "reqwest",
+ "serde",
  "sqlx",
  "thiserror",
  "tokio",
@@ -1785,6 +1786,7 @@ dependencies = [
  "pem",
  "relay_core",
  "relay_daemon",
+ "serde",
  "thiserror",
  "tokio",
 ]

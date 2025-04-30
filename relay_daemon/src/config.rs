@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use relay_core::crypto::PublicKey;
 use reqwest::Url;
+use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -50,6 +51,50 @@ impl RelayData {
             key,
             nickname,
             listener_endpoint: endpoint,
+        })
+    }
+}
+
+impl Serialize for RelayData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("RelayData", 3)?;
+        state.serialize_field("key", &self.key)?;
+        state.serialize_field("nickname", &self.nickname)?;
+        state.serialize_field(
+            "listener_endpoint",
+            &self.listener_endpoint.clone().map(|url| url.to_string()),
+        )?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for RelayData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RelayDataIntermediate {
+            key: PublicKey,
+            nickname: Option<String>,
+            listener_endpoint: Option<String>,
+        }
+
+        let intermediate = RelayDataIntermediate::deserialize(deserializer)?;
+
+        let listener_endpoint = if let Some(url_str) = intermediate.listener_endpoint {
+            Some(Url::from_str(&url_str).map_err(serde::de::Error::custom)?)
+        } else {
+            None
+        };
+
+        Ok(RelayData {
+            key: intermediate.key,
+            nickname: intermediate.nickname,
+            listener_endpoint,
         })
     }
 }

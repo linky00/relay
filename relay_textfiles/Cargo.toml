@@ -15,5 +15,6 @@ notify = "8.0.0"
 pem = "3.0.5"
 relay_core = { path = "../relay_core" }
 relay_daemon = { path = "../relay_daemon" }
+serde = { version = "1.0.219", features = ["derive"] }
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["full"] }

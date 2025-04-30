@@ -97,7 +97,11 @@ impl Textfiles {
         Ok(rx)
     }
 
-    pub fn init_dir(dir_path: &Path, secret_key: &SecretKey) -> Result<(), TextfilesError> {
+    pub fn init_dir(
+        dir_path: &Path,
+        relay_name: &str,
+        secret_key: &SecretKey,
+    ) -> Result<(), TextfilesError> {
         fs::create_dir_all(dir_path)?;
 
         if fs::read_dir(dir_path)?.next().is_some() {
@@ -108,7 +112,7 @@ impl Textfiles {
 
         fs::write(
             dir_path.join(CONFIG_FILE_PATH),
-            include_str!("file_templates/relay.toml"),
+            format!(include_str!("file_templates/relay.toml"), relay_name),
         )?;
         fs::write(
             dir_path.join(POEM_FILE_PATH),
