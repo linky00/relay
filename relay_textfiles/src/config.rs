@@ -1,13 +1,14 @@
 use relay_daemon::config::RelayData;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RelaytConfig {
-    name: String,
-    listening: Option<bool>,
-    listening_port: Option<u16>,
-    initial_ttl: Option<u8>,
-    max_forwarding_ttl: Option<u8>,
+    pub name: String,
+    pub listening: Option<bool>,
+    pub listening_port: Option<u16>,
+    pub initial_ttl: Option<u8>,
+    pub max_forwarding_ttl: Option<u8>,
     #[serde(rename = "paired_relays")]
-    trusted_relays: Vec<RelayData>,
+    #[serde(default)]
+    pub trusted_relays: Vec<RelayData>,
 }

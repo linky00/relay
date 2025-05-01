@@ -5,7 +5,7 @@ use std::{
 };
 
 use notify::{Event, RecursiveMode, Watcher};
-use pem::Pem;
+use pem::{Pem, PemError};
 use relay_core::{
     crypto::SecretKey,
     mailroom::{DEFAULT_INITIAL_TTL, DEFAULT_MAX_FORWARDING_TTL},
@@ -20,7 +20,10 @@ const CONFIG_FILE_PATH: &str = "relay.toml";
 const POEM_FILE_PATH: &str = "poem.txt";
 const LISTEN_FILE_PATH: &str = "listen.txt";
 const PUBLIC_FILE_PATH: &str = "public.txt";
+const ARCHIVE_FILE_PATH: &str = "store/archive.db";
 const SECRET_FILE_PATH: &str = "store/secret.pem";
+
+type WatcherReceiver = Receiver<Result<Event, notify::Error>>;
 
 #[derive(Error, Debug)]
 pub enum TextfilesError {
@@ -30,6 +33,10 @@ pub enum TextfilesError {
     NotifyError(#[from] notify::Error),
     #[error("toml error: {0}")]
     TomlError(#[from] toml::de::Error),
+    #[error("pem error: {0}")]
+    PemError(#[from] PemError),
+    #[error("key is wrong length")]
+    KeyLengthError,
     #[error("trying to init in dir that is not empty")]
     InitDirNotEmpty,
     #[error("missing config file")]
@@ -42,19 +49,16 @@ pub enum TextfilesError {
     MissingSecretFile,
 }
 
-#[derive(Clone)]
 pub struct Textfiles {
     config_path: PathBuf,
     poem_path: PathBuf,
     listen_path: PathBuf,
+    archive_path: PathBuf,
     secret_path: PathBuf,
 }
 
 impl Textfiles {
-    pub fn new<F>(dir_path: &Path, mut apply_new_config: F) -> Result<Self, TextfilesError>
-    where
-        F: FnMut(Result<RelaytConfig, TextfilesError>) + Send + 'static,
-    {
+    pub fn new(dir_path: &Path) -> Result<Self, TextfilesError> {
         let get_existing_path = |file_path, error| {
             let full_path = dir_path.join(file_path);
             if !full_path.try_exists()? {
@@ -66,30 +70,27 @@ impl Textfiles {
         let config_path = get_existing_path(CONFIG_FILE_PATH, TextfilesError::MissingConfigFile)?;
         let poem_path = get_existing_path(POEM_FILE_PATH, TextfilesError::MissingPoemFile)?;
         let listen_path = get_existing_path(LISTEN_FILE_PATH, TextfilesError::MissingListenFile)?;
+        let archive_path = dir_path.join(ARCHIVE_FILE_PATH);
         let secret_path = get_existing_path(SECRET_FILE_PATH, TextfilesError::MissingSecretFile)?;
 
-        let mut rx = Self::watch_file(&config_path)?;
-
-        let textfiles = Textfiles {
+        Ok(Textfiles {
             config_path,
             poem_path,
             listen_path,
+            archive_path,
             secret_path,
-        };
-
-        let textfiles_clone = textfiles.clone();
-        tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                if let Ok(_) = event {
-                    apply_new_config(textfiles_clone.read_config().into())
-                }
-            }
-        });
-
-        Ok(textfiles)
+        })
     }
 
-    fn watch_file(path: &Path) -> notify::Result<Receiver<notify::Result<Event>>> {
+    pub fn watch_config_changes(&self) -> Result<WatcherReceiver, TextfilesError> {
+        Self::watch_file(&self.config_path)
+    }
+
+    pub fn watch_poem_changes(&self) -> Result<WatcherReceiver, TextfilesError> {
+        Self::watch_file(&self.poem_path)
+    }
+
+    fn watch_file(path: &Path) -> Result<WatcherReceiver, TextfilesError> {
         let (tx, rx) = mpsc::channel(1);
 
         let mut watcher = notify::recommended_watcher(move |res| {
@@ -146,5 +147,22 @@ impl Textfiles {
 
     pub fn read_config(&self) -> Result<RelaytConfig, TextfilesError> {
         Ok(toml::from_str(&fs::read_to_string(&self.config_path)?)?)
+    }
+
+    pub fn read_poem(&self) -> Result<String, TextfilesError> {
+        Ok(fs::read_to_string(&self.poem_path)?)
+    }
+
+    pub fn read_secret(&self) -> Result<SecretKey, TextfilesError> {
+        Ok(SecretKey::new_from_bytes(
+            pem::parse(fs::read_to_string(&self.secret_path)?)?
+                .contents()
+                .try_into()
+                .map_err(|_| TextfilesError::KeyLengthError)?,
+        ))
+    }
+
+    pub fn archive_path(&self) -> &PathBuf {
+        &self.archive_path
     }
 }

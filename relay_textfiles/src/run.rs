@@ -1,39 +1,31 @@
-use std::{env, path::Path};
+use std::path::Path;
 
 use anyhow::Result;
-use relay_core::{
-    crypto::SecretKey,
-    mailroom::{GetNextLine, NextLine},
-};
+use relay_core::mailroom::{GetNextLine, NextLine};
 use relay_daemon::{
     config::{DaemonConfig, RelayData},
     daemon::Daemon,
     event::{Event, HandleEvent},
 };
 
-pub async fn run(dir_path: &Path) -> Result<()> {
-    dotenvy::dotenv().expect("should be able to read dotenv");
+use crate::textfiles::Textfiles;
 
-    let secret_key = SecretKey::generate();
+pub async fn run(dir_path: &Path) -> Result<()> {
+    let textfiles = Textfiles::new(dir_path)?;
+
+    let relayt_config = textfiles.read_config()?;
 
     let daemon_config = DaemonConfig {
-        trusted_relays: vec![
-            RelayData::new(
-                SecretKey::generate().public_key(),
-                Some("another relay".to_owned()),
-                Some(&env::var("RELAY_URL").expect("RELAY_URL should be present")),
-            )
-            .unwrap(),
-        ],
-        custom_initial_ttl: None,
-        custom_max_forwarding_ttl: None,
+        trusted_relays: relayt_config.trusted_relays,
+        custom_initial_ttl: relayt_config.initial_ttl,
+        custom_max_forwarding_ttl: relayt_config.max_forwarding_ttl,
     };
 
     let relay_daemon = Daemon::new_fast(
-        IncreasingLine::new("me"),
+        LineGenerator::new("me"),
         EventPrinter,
-        secret_key,
-        &env::var("ARCHIVE_DB").unwrap(),
+        textfiles.read_secret()?,
+        textfiles.archive_path().as_os_str().try_into()?,
         daemon_config,
     )
     .await
@@ -41,7 +33,10 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 
     relay_daemon.start_sender().await.unwrap();
 
-    relay_daemon.start_listener(None).await.unwrap();
+    relay_daemon
+        .start_listener(relayt_config.listening_port)
+        .await
+        .unwrap();
 
     tokio::signal::ctrl_c()
         .await
@@ -50,12 +45,12 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     Ok(())
 }
 
-struct IncreasingLine {
+struct LineGenerator {
     author: String,
     count: u32,
 }
 
-impl IncreasingLine {
+impl LineGenerator {
     fn new<S: Into<String>>(author: S) -> Self {
         Self {
             author: author.into(),
@@ -64,7 +59,7 @@ impl IncreasingLine {
     }
 }
 
-impl GetNextLine for IncreasingLine {
+impl GetNextLine for LineGenerator {
     fn get_next_line(&mut self) -> Option<NextLine> {
         self.count += 1;
         let text = format!("line {}", self.count);

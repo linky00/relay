@@ -5,7 +5,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use thiserror::Error;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DaemonConfig {
     pub trusted_relays: Vec<RelayData>,
     pub custom_initial_ttl: Option<u8>,
@@ -29,11 +29,11 @@ pub enum RelayDataError {
     UrlNotValid,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RelayData {
     pub key: PublicKey,
     pub nickname: Option<String>,
-    pub(crate) listener_endpoint: Option<Url>,
+    pub(crate) endpoint: Option<Url>,
 }
 
 impl RelayData {
@@ -50,7 +50,7 @@ impl RelayData {
         Ok(RelayData {
             key,
             nickname,
-            listener_endpoint: endpoint,
+            endpoint,
         })
     }
 }
@@ -64,8 +64,8 @@ impl Serialize for RelayData {
         state.serialize_field("key", &self.key)?;
         state.serialize_field("nickname", &self.nickname)?;
         state.serialize_field(
-            "listener_endpoint",
-            &self.listener_endpoint.clone().map(|url| url.to_string()),
+            "endpoint",
+            &self.endpoint.clone().map(|url| url.to_string()),
         )?;
         state.end()
     }
@@ -80,12 +80,12 @@ impl<'de> Deserialize<'de> for RelayData {
         struct RelayDataIntermediate {
             key: PublicKey,
             nickname: Option<String>,
-            listener_endpoint: Option<String>,
+            endpoint: Option<String>,
         }
 
         let intermediate = RelayDataIntermediate::deserialize(deserializer)?;
 
-        let listener_endpoint = if let Some(url_str) = intermediate.listener_endpoint {
+        let endpoint = if let Some(url_str) = intermediate.endpoint {
             Some(Url::from_str(&url_str).map_err(serde::de::Error::custom)?)
         } else {
             None
@@ -94,7 +94,7 @@ impl<'de> Deserialize<'de> for RelayData {
         Ok(RelayData {
             key: intermediate.key,
             nickname: intermediate.nickname,
-            listener_endpoint,
+            endpoint,
         })
     }
 }

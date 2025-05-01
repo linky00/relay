@@ -36,7 +36,7 @@ pub async fn send_to_listeners<L, E>(
         .iter()
         .filter_map(|relay| {
             relay
-                .listener_endpoint
+                .endpoint
                 .as_ref()
                 .map(|endpoint| (relay.clone(), endpoint.clone()))
         })

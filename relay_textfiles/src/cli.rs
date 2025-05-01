@@ -37,13 +37,12 @@ pub async fn do_cli() -> Result<()> {
                 let path = Path::new(&directory);
                 let relay_name = path
                     .file_stem()
-                    .context("can't get file stem")?
-                    .try_into()
-                    .context("can't turn file stem into string")?;
+                    .context("coudln't get file stem")?
+                    .try_into()?;
                 Textfiles::init_dir(&path, relay_name, &SecretKey::generate())?;
             }
             Commands::Start { directory } => {
-                let path = get_checked_dir_path(&directory)?;
+                let path = get_checked_dir_path(&directory).context("can't get file path")?;
                 run::run(&path).await?;
             }
         }
