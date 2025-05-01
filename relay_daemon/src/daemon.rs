@@ -19,6 +19,8 @@ use crate::{
 mod archive;
 mod exchange;
 
+pub const DEFAULT_LISTENING_PORT: u16 = 7070;
+
 #[derive(Error, Debug)]
 pub enum DaemonError {
     #[error("cannot start db connection")]
@@ -117,7 +119,7 @@ where
             .route("/", routing::post(Self::handle_request))
             .with_state(state);
 
-        let port = custom_port.unwrap_or(7070);
+        let port = custom_port.unwrap_or(DEFAULT_LISTENING_PORT);
         let address = format!("0.0.0.0:{}", port);
 
         let listener = TcpListener::bind(address)

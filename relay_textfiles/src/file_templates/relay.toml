@@ -1,1 +1,21 @@
-name = "{}"
+# name of the relay
+name = "{relay_name}"
+
+# is this a listener relay?
+listening = false
+
+# port for listening
+# listening_port = {default_listening_port}
+
+# initial ttl for created envelopes
+# initial_ttl = {default_initial_ttl}
+
+# max ttl that will be forwarded
+# max_forwarding_ttl = {default_max_forwarding_ttl}
+
+# uncomment below to add a relay
+# duplicate to add more relays
+# [[paired_relays]]
+# key = ""
+# nickname = ""
+# # endpoint = ""

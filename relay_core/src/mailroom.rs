@@ -12,8 +12,8 @@ use crate::{
     payload::TrustedPayload,
 };
 
-const DEFAULT_INITIAL_TTL: u8 = 8;
-const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
+pub const DEFAULT_INITIAL_TTL: u8 = 8;
+pub const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
 const HOUR_IN_SECONDS: u64 = 60 * 60;
 
 #[derive(Error, Debug)]

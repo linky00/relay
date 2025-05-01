@@ -6,7 +6,11 @@ use std::{
 
 use notify::{Event, RecursiveMode, Watcher};
 use pem::Pem;
-use relay_core::crypto::SecretKey;
+use relay_core::{
+    crypto::SecretKey,
+    mailroom::{DEFAULT_INITIAL_TTL, DEFAULT_MAX_FORWARDING_TTL},
+};
+use relay_daemon::daemon::DEFAULT_LISTENING_PORT;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, Receiver};
 
@@ -115,7 +119,13 @@ impl Textfiles {
 
         fs::write(
             dir_path.join(CONFIG_FILE_PATH),
-            format!(include_str!("file_templates/relay.toml"), relay_name),
+            format!(
+                include_str!("file_templates/relay.toml"),
+                relay_name = relay_name,
+                default_listening_port = DEFAULT_LISTENING_PORT,
+                default_initial_ttl = DEFAULT_INITIAL_TTL,
+                default_max_forwarding_ttl = DEFAULT_MAX_FORWARDING_TTL
+            ),
         )?;
         fs::write(
             dir_path.join(POEM_FILE_PATH),

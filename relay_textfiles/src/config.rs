@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct RelaytConfig {
     name: String,
-    is_listener: bool,
+    listening: Option<bool>,
+    listening_port: Option<u16>,
+    initial_ttl: Option<u8>,
+    max_forwarding_ttl: Option<u8>,
+    #[serde(rename = "paired_relays")]
     trusted_relays: Vec<RelayData>,
-    listening_custom_port: Option<u16>,
-    custom_initial_ttl: Option<u8>,
-    custom_max_forwarding_ttl: Option<u8>,
 }
