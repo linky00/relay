@@ -36,7 +36,7 @@ where
     L: GetNextLine,
     E: HandleEvent + Send + 'static,
 {
-    state: Arc<DaemonState<L, E>>,
+    state: Arc<Mutex<DaemonState<L, E>>>,
     fast_mode: bool,
 }
 
@@ -53,9 +53,9 @@ where
         config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
         Ok(Self {
-            state: Arc::new(
+            state: Arc::new(Mutex::new(
                 DaemonState::new(line_generator, event_handler, secret_key, db_url, config).await?,
-            ),
+            )),
             fast_mode: false,
         })
     }
@@ -89,6 +89,7 @@ where
                     move |_, _| {
                         let state = Arc::clone(&state);
                         Box::pin(async move {
+                            let state = state.lock().await;
                             exchange::send_to_listeners(
                                 Arc::clone(&state.mailroom),
                                 &state.config,
@@ -108,7 +109,11 @@ where
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
 
-        event::emit_event(&self.state.event_handler, Event::SenderStartedSchedule).await;
+        event::emit_event(
+            &self.state.lock().await.event_handler,
+            Event::SenderStartedSchedule,
+        )
+        .await;
 
         Ok(())
     }
@@ -133,7 +138,7 @@ where
         });
 
         event::emit_event(
-            &self.state.event_handler,
+            &self.state.lock().await.event_handler,
             Event::ListenerStartedListening(port),
         )
         .await;
@@ -142,9 +147,10 @@ where
     }
 
     async fn handle_request(
-        State(state): State<Arc<DaemonState<L, E>>>,
+        State(state): State<Arc<Mutex<DaemonState<L, E>>>>,
         body: String,
     ) -> impl IntoResponse {
+        let state = state.lock().await;
         exchange::respond_to_sender(
             &body,
             Arc::clone(&state.mailroom),
@@ -152,6 +158,10 @@ where
             Arc::clone(&state.event_handler),
         )
         .await
+    }
+
+    pub async fn update_config(&mut self, config: DaemonConfig) {
+        self.state.lock().await.config = config;
     }
 }
 
