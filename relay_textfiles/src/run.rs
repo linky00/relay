@@ -14,6 +14,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let textfiles = Textfiles::new(dir_path)?;
 
     let relayt_config = textfiles.read_config()?;
+    let poem = textfiles.read_poem()?;
 
     let daemon_config = DaemonConfig {
         trusted_relays: relayt_config.trusted_relays,
@@ -22,7 +23,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     };
 
     let relay_daemon = Daemon::new_fast(
-        LineGenerator::new("me"),
+        LineGenerator::new("me", poem),
         EventPrinter,
         textfiles.read_secret()?,
         textfiles.archive_path().as_os_str().try_into()?,
@@ -47,27 +48,33 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 
 struct LineGenerator {
     author: String,
-    count: u32,
+    poem: Vec<String>,
+    n: usize,
 }
 
 impl LineGenerator {
-    fn new<S: Into<String>>(author: S) -> Self {
+    fn new<S: Into<String>>(author: S, poem: Vec<String>) -> Self {
         Self {
             author: author.into(),
-            count: 0,
+            poem,
+            n: 0,
         }
     }
 }
 
 impl GetNextLine for LineGenerator {
     fn get_next_line(&mut self) -> Option<NextLine> {
-        self.count += 1;
-        let text = format!("line {}", self.count);
-        println!("generated new line: \"{text}\"");
-        Some(NextLine {
-            line: text,
-            author: self.author.clone(),
-        })
+        let next_line = if let Some(line) = self.poem.get(self.n) {
+            Some(NextLine {
+                line: line.to_owned(),
+                author: self.author.clone(),
+            })
+        } else {
+            None
+        };
+        self.n += 1;
+        self.n %= self.poem.len();
+        next_line
     }
 }
 

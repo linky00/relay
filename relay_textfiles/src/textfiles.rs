@@ -149,8 +149,11 @@ impl Textfiles {
         Ok(toml::from_str(&fs::read_to_string(&self.config_path)?)?)
     }
 
-    pub fn read_poem(&self) -> Result<String, TextfilesError> {
-        Ok(fs::read_to_string(&self.poem_path)?)
+    pub fn read_poem(&self) -> Result<Vec<String>, TextfilesError> {
+        Ok(fs::read_to_string(&self.poem_path)?
+            .lines()
+            .map(String::from)
+            .collect())
     }
 
     pub fn read_secret(&self) -> Result<SecretKey, TextfilesError> {
