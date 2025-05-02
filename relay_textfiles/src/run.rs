@@ -27,6 +27,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     };
 
     let relay_daemon = if textfiles.debug_mode() {
+        println!("STARTING IN DEBUG MODE");
         Daemon::new_fast(
             line_generator,
             event_printer,
