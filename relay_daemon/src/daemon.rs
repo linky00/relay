@@ -84,7 +84,7 @@ where
                 Job::new_async(
                     match self.fast_mode {
                         true => "*/5 * * * * *",
-                        false => "0 * * * *",
+                        false => "0 * * * * *",
                     },
                     move |_, _| {
                         let state = Arc::clone(&state);
