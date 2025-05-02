@@ -16,32 +16,45 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let relayt_config = textfiles.read_config()?;
     let poem = textfiles.read_poem()?;
 
+    let line_generator = LineGenerator::new(relayt_config.name, poem);
+    let event_printer = EventPrinter;
+    let secret_key = textfiles.read_secret()?;
+    let db_url = textfiles.archive_path().as_os_str().try_into()?;
     let daemon_config = DaemonConfig {
         trusted_relays: relayt_config.trusted_relays,
         custom_initial_ttl: relayt_config.initial_ttl,
         custom_max_forwarding_ttl: relayt_config.max_forwarding_ttl,
     };
 
-    let relay_daemon = Daemon::new_fast(
-        LineGenerator::new("me", poem),
-        EventPrinter,
-        textfiles.read_secret()?,
-        textfiles.archive_path().as_os_str().try_into()?,
-        daemon_config,
-    )
-    .await
-    .unwrap();
-
-    relay_daemon.start_sender().await.unwrap();
-
-    relay_daemon
-        .start_listener(relayt_config.listening_port)
+    let relay_daemon = if textfiles.debug_mode() {
+        Daemon::new_fast(
+            line_generator,
+            event_printer,
+            secret_key,
+            db_url,
+            daemon_config,
+        )
         .await
-        .unwrap();
-
-    tokio::signal::ctrl_c()
+    } else {
+        Daemon::new(
+            line_generator,
+            event_printer,
+            secret_key,
+            db_url,
+            daemon_config,
+        )
         .await
-        .expect("should be able to wait on ctrl+c");
+    }?;
+
+    relay_daemon.start_sender().await?;
+
+    if relayt_config.listening {
+        relay_daemon
+            .start_listener(relayt_config.listening_port)
+            .await?;
+    }
+
+    tokio::signal::ctrl_c().await?;
 
     Ok(())
 }

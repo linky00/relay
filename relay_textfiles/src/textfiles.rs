@@ -17,6 +17,7 @@ use tokio::sync::mpsc::{self, Receiver};
 use crate::config::RelaytConfig;
 
 const CONFIG_FILE_PATH: &str = "relay.toml";
+const CONFIG_DEBUG_FILE_PATH: &str = "relay.debug.toml";
 const POEM_FILE_PATH: &str = "poem.txt";
 const LISTEN_FILE_PATH: &str = "listen.txt";
 const PUBLIC_FILE_PATH: &str = "public.txt";
@@ -51,6 +52,7 @@ pub enum TextfilesError {
 
 pub struct Textfiles {
     config_path: PathBuf,
+    debug_mode: bool,
     poem_path: PathBuf,
     listen_path: PathBuf,
     archive_path: PathBuf,
@@ -67,7 +69,11 @@ impl Textfiles {
             Ok(full_path)
         };
 
-        let config_path = get_existing_path(CONFIG_FILE_PATH, TextfilesError::MissingConfigFile)?;
+        let (config_path, debug_mode) =
+            match get_existing_path(CONFIG_DEBUG_FILE_PATH, TextfilesError::MissingConfigFile) {
+                Ok(config_path) => (config_path, true),
+                Err(e) => (get_existing_path(CONFIG_FILE_PATH, e)?, false),
+            };
         let poem_path = get_existing_path(POEM_FILE_PATH, TextfilesError::MissingPoemFile)?;
         let listen_path = get_existing_path(LISTEN_FILE_PATH, TextfilesError::MissingListenFile)?;
         let archive_path = dir_path.join(ARCHIVE_FILE_PATH);
@@ -75,6 +81,7 @@ impl Textfiles {
 
         Ok(Textfiles {
             config_path,
+            debug_mode,
             poem_path,
             listen_path,
             archive_path,
@@ -163,6 +170,10 @@ impl Textfiles {
                 .try_into()
                 .map_err(|_| TextfilesError::KeyLengthError)?,
         ))
+    }
+
+    pub fn debug_mode(&self) -> bool {
+        self.debug_mode
     }
 
     pub fn archive_path(&self) -> &PathBuf {
