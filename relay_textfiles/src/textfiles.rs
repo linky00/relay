@@ -1,6 +1,6 @@
 use std::{
-    fs::{self},
-    io::{self},
+    fs::{self, File},
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -50,6 +50,7 @@ pub enum TextfilesError {
     MissingSecretFile,
 }
 
+#[derive(Clone)]
 pub struct Textfiles {
     config_path: PathBuf,
     debug_mode: bool,
@@ -170,6 +171,14 @@ impl Textfiles {
                 .try_into()
                 .map_err(|_| TextfilesError::KeyLengthError)?,
         ))
+    }
+
+    pub fn write_listen(&self, line: &str) -> Result<(), TextfilesError> {
+        let mut listen_file = File::options().append(true).open(&self.listen_path)?;
+
+        writeln!(&mut listen_file, "{line}")?;
+
+        Ok(())
     }
 
     pub fn debug_mode(&self) -> bool {

@@ -17,7 +17,9 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let poem = textfiles.read_poem()?;
 
     let line_generator = LineGenerator::new(relayt_config.name, poem);
-    let event_printer = EventPrinter;
+    let event_printer = EventPrinter {
+        textfiles: textfiles.clone(),
+    };
     let secret_key = textfiles.read_secret()?;
     let db_url = textfiles.archive_path().as_os_str().try_into()?;
     let daemon_config = DaemonConfig {
@@ -92,7 +94,9 @@ impl GetNextLine for LineGenerator {
     }
 }
 
-struct EventPrinter;
+struct EventPrinter {
+    textfiles: Textfiles,
+}
 
 impl EventPrinter {
     fn relay_display(relay: RelayData) -> String {
@@ -181,7 +185,13 @@ impl HandleEvent for EventPrinter {
                 println!("sender finished run");
             }
             Event::AddedMessageToArchive(message) => {
-                println!("adding message to archive: \"{}\"", message.contents.line)
+                println!("adding message to archive: \"{}\"", message.contents.line);
+                match self.textfiles.write_listen(&message.contents.line) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("can't write to listen.txt: {e}");
+                    }
+                };
             }
         }
     }
