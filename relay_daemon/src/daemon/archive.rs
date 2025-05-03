@@ -87,6 +87,10 @@ impl Archive for DBArchive {
         {
             found_message.id
         } else {
+            self.event_sender
+                .send(Event::AddedMessageToArchive(envelope.message.clone()))
+                .ok();
+
             sqlx::query!(
                 "
                 INSERT INTO messages (from_key, signature, uuid, author, line, received_at)
@@ -103,10 +107,6 @@ impl Archive for DBArchive {
             .await?
             .last_insert_rowid()
         };
-
-        self.event_sender
-            .send(Event::AddedMessageToArchive(envelope.message.clone()))
-            .ok();
 
         let envelope_id = sqlx::query!(
             "
