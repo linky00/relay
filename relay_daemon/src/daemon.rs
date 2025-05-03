@@ -83,7 +83,7 @@ where
             .add(
                 Job::new_async(
                     match self.fast_mode {
-                        true => "*/5 * * * * *",
+                        true => "*/10 * * * * *",
                         false => "0 * * * * *",
                     },
                     move |_, _| {
@@ -189,12 +189,12 @@ where
     ) -> Result<Self, DaemonError> {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
-                .with_second(datetime.second() / 5 * 5)
-                .expect("should be able to set seconds to a multiple of 5")
+                .with_second(datetime.second() / 10 * 10)
+                .expect("should be able to set seconds to a multiple of 10")
                 .with_nanosecond(0)
                 .expect("should be able to set any utc time to nanosecond 0")
         };
-        let interval = Duration::from_secs(5);
+        let interval = Duration::from_secs(10);
 
         let event_handler = Arc::new(Mutex::new(event_handler));
 
