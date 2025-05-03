@@ -1,5 +1,5 @@
 use relay_core::message::{Envelope, Message};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::config::RelayData;
 
@@ -23,4 +23,4 @@ pub enum Event {
     AddedMessageToArchive(Message),
 }
 
-pub type EventSender = Sender<Event>;
+pub type EventSender = UnboundedSender<Event>;

@@ -24,7 +24,7 @@ pub async fn send_to_listeners<L>(
 ) where
     L: GetNextLine + Send + 'static,
 {
-    event_sender.send(Event::SenderBeginningRun).await.ok();
+    event_sender.send(Event::SenderBeginningRun).ok();
 
     let now = Utc::now();
     let client = Client::new();
@@ -56,7 +56,6 @@ pub async fn send_to_listeners<L>(
                     Err(error) => {
                         event_sender
                             .send(Event::SenderDBError(error.to_string()))
-                            .await
                             .ok();
                         return;
                     }
@@ -75,7 +74,6 @@ pub async fn send_to_listeners<L>(
                                 relay.clone(),
                                 outgoing_envelopes.envelopes,
                             ))
-                            .await
                             .ok();
 
                         let handle_response = async || {
@@ -122,12 +120,11 @@ pub async fn send_to_listeners<L>(
                         };
 
                         let event = handle_response().await.unwrap_or_else(|e| e);
-                        event_sender.send(event).await.ok();
+                        event_sender.send(event).ok();
                     }
                     Err(error) => {
                         event_sender
                             .send(Event::SenderFailedSending(relay.clone(), error.to_string()))
-                            .await
                             .ok();
                     }
                 }
@@ -137,7 +134,7 @@ pub async fn send_to_listeners<L>(
 
     future::join_all(handles).await;
 
-    event_sender.send(Event::SenderFinishedRun).await.ok();
+    event_sender.send(Event::SenderFinishedRun).ok();
 }
 
 pub async fn respond_to_sender<L>(
@@ -157,7 +154,6 @@ where
             Err(_) => {
                 event_sender
                     .send(Event::ListenerReceivedFromUntrustedSender)
-                    .await
                     .ok();
                 return Err((
                     StatusCode::FORBIDDEN,
@@ -166,10 +162,7 @@ where
             }
         },
         Err(_) => {
-            event_sender
-                .send(Event::ListenerReceivedBadPayload)
-                .await
-                .ok();
+            event_sender.send(Event::ListenerReceivedBadPayload).ok();
             return Err((StatusCode::BAD_REQUEST, "payload malformed".to_owned()));
         }
     };
@@ -192,7 +185,6 @@ where
                     relay_data,
                     trusted_payload.envelopes().clone(),
                 ))
-                .await
                 .ok();
 
             let outgoing_envelopes = mailroom.get_outgoing_at_time(
@@ -206,7 +198,6 @@ where
                 Err(error) => {
                     event_sender
                         .send(Event::ListenerDBError(error.to_string()))
-                        .await
                         .ok();
                     Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -218,7 +209,6 @@ where
         Err(MailroomError::AlreadyReceivedFromKey) => {
             event_sender
                 .send(Event::ListenerAlreadyReceivedFromSender(relay_data))
-                .await
                 .ok();
             Err((
                 StatusCode::FORBIDDEN,
@@ -228,7 +218,6 @@ where
         Err(MailroomError::ArchiveFailure(error)) => {
             event_sender
                 .send(Event::ListenerDBError(error.to_string()))
-                .await
                 .ok();
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

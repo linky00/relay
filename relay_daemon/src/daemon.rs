@@ -112,7 +112,6 @@ where
             .await
             .event_sender
             .send(Event::SenderStartedSchedule)
-            .await
             .ok();
 
         Ok(())
@@ -142,7 +141,6 @@ where
             .await
             .event_sender
             .send(Event::ListenerStartedListening(port))
-            .await
             .ok();
 
         Ok(())

@@ -20,7 +20,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let line_generator = LineGenerator::new(relayt_config.name, poem);
     let event_printer = EventPrinter::new(textfiles.clone());
 
-    let (event_tx, mut event_rx) = mpsc::channel(8);
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             event_printer.print(event);

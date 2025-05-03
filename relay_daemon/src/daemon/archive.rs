@@ -106,7 +106,6 @@ impl Archive for DBArchive {
 
         self.event_sender
             .send(Event::AddedMessageToArchive(envelope.message.clone()))
-            .await
             .ok();
 
         let envelope_id = sqlx::query!(
