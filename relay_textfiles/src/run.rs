@@ -18,12 +18,12 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let poem = textfiles.read_poem()?;
 
     let line_generator = LineGenerator::new(relayt_config.name, poem);
-    let event_printer = EventPrinter::new(textfiles.clone());
 
+    let event_printer = EventPrinter::new(textfiles.clone());
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
-            event_printer.print(event);
+            event_printer.print_event(event);
         }
     });
 
@@ -87,6 +87,12 @@ impl GetNextLine for LineGenerator {
     }
 }
 
+enum Source {
+    Listener,
+    Sender,
+    Archive,
+}
+
 struct EventPrinter {
     textfiles: Textfiles,
 }
@@ -96,95 +102,140 @@ impl EventPrinter {
         EventPrinter { textfiles }
     }
 
-    fn print(&self, event: Event) {
+    fn print_event(&self, event: Event) {
         match event {
             Event::ListenerStartedListening(port) => {
-                println!("listener started listening on {port}");
+                Self::print_from_source(Source::Listener, format!("Started listening on {port}"));
             }
             Event::ListenerReceivedFromSender(relay_data, envelopes) => {
-                println!(
-                    "listener received from sender relay {}: {} envelopes",
-                    Self::relay_display(relay_data.expect("this should exist")),
-                    envelopes.len()
+                Self::print_from_source(
+                    Source::Listener,
+                    format!(
+                        "Received {} envelopes from sender relay {}",
+                        envelopes.len(),
+                        Self::relay_display(relay_data.expect("this should exist")),
+                    ),
                 );
             }
             Event::ListenerReceivedBadPayload => {
-                println!("listener received bad payload");
+                Self::print_from_source(Source::Listener, format!("Received bad payload"));
             }
             Event::ListenerReceivedFromUntrustedSender => {
-                println!("listener received from untrusted sender");
+                Self::print_from_source(
+                    Source::Listener,
+                    format!("Received from untrusted sender"),
+                );
             }
             Event::ListenerDBError(error) => {
-                println!("listener had db error: {error}");
+                Self::print_from_source(Source::Listener, format!("Had DB error: {error}"));
             }
             Event::ListenerAlreadyReceivedFromSender(relay_data) => {
-                println!(
-                    "listener already received from sender relay {}",
-                    Self::relay_display(relay_data.expect("this should exist"))
-                )
+                Self::print_from_source(
+                    Source::Listener,
+                    format!(
+                        "Already received from sender relay {}",
+                        Self::relay_display(relay_data.expect("this should exist"))
+                    ),
+                );
             }
             Event::SenderStartedSchedule => {
-                println!("sender started schedule");
+                Self::print_from_source(Source::Sender, format!("Started schedule"));
             }
             Event::SenderBeginningRun => {
-                println!("sender beginning run");
+                Self::print_from_source(Source::Sender, format!("Beginning run"));
             }
             Event::SenderDBError(error) => {
-                println!("sender had db error: {error}");
+                Self::print_from_source(Source::Sender, format!("Had db error: {error}"));
             }
             Event::SenderSentToListener(relay, envelopes) => {
-                println!(
-                    "sender sent listener relay {}: {} envelopes",
-                    Self::relay_display(relay),
-                    envelopes.len()
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Sent {} envelopes listener relay {}",
+                        envelopes.len(),
+                        Self::relay_display(relay)
+                    ),
                 );
             }
             Event::SenderReceivedFromListener(relay, envelopes) => {
-                println!(
-                    "sender received from listener relay {}: {} envelopes",
-                    Self::relay_display(relay),
-                    envelopes.len()
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Received {} envelopes from listener relay {}",
+                        envelopes.len(),
+                        Self::relay_display(relay),
+                    ),
                 );
             }
             Event::SenderFailedSending(relay, error) => {
-                println!(
-                    "sender failed sending to listener relay {}: {}",
-                    Self::relay_display(relay),
-                    error
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Failed sending to listener relay {}: {}",
+                        Self::relay_display(relay),
+                        error
+                    ),
                 );
             }
             Event::SenderReceivedHttpError(relay, error) => {
-                println!(
-                    "sender received http error from listener relay {}: {}",
-                    Self::relay_display(relay),
-                    error
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Received http error from listener relay {}: {}",
+                        Self::relay_display(relay),
+                        error
+                    ),
                 );
             }
             Event::SenderReceivedBadResponse(relay) => {
-                println!(
-                    "sender received bad response from listener relay {}",
-                    Self::relay_display(relay)
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Received bad response from listener relay {}",
+                        Self::relay_display(relay)
+                    ),
                 );
             }
             Event::SenderAlreadyReceivedFromListener(relay) => {
-                println!(
-                    "sender already received from listener relay {}",
-                    Self::relay_display(relay)
+                Self::print_from_source(
+                    Source::Sender,
+                    format!(
+                        "Already received from listener relay {}",
+                        Self::relay_display(relay)
+                    ),
                 );
             }
             Event::SenderFinishedRun => {
-                println!("sender finished run");
+                Self::print_from_source(Source::Sender, format!("Finished run"));
             }
             Event::AddedMessageToArchive(message) => {
-                println!("adding message to archive: \"{}\"", message.contents.line);
+                Self::print_from_source(
+                    Source::Archive,
+                    format!("Adding message to archive: \"{}\"", message.contents.line),
+                );
+
                 match self.textfiles.write_listen(&message.contents.line) {
                     Ok(_) => {}
                     Err(e) => {
-                        println!("can't write to listen.txt: {e}");
+                        Self::print_from_source(
+                            Source::Archive,
+                            format!("Can't write to listen.txt: {e}"),
+                        );
                     }
                 };
             }
         }
+    }
+
+    fn print_from_source(source: Source, line: String) {
+        println!(
+            "{}{line}",
+            match source {
+                Source::Listener => "[Listener] ",
+                Source::Sender => "[Sender]   ",
+                Source::Archive => "[Archive]  ",
+            }
+        )
     }
 
     fn relay_display(relay: RelayData) -> String {
