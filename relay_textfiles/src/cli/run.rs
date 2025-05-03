@@ -113,7 +113,10 @@ impl EventPrinter {
                     format!(
                         "Received {} envelopes from sender relay {}",
                         envelopes.len(),
-                        Self::relay_display(relay_data.expect("this should exist")),
+                        match relay_data {
+                            Some(relay_data) => Self::relay_display(relay_data),
+                            None => "[unknown relay]".into(),
+                        },
                     ),
                 );
             }
@@ -134,7 +137,10 @@ impl EventPrinter {
                     Source::Listener,
                     format!(
                         "Already received from sender relay {}",
-                        Self::relay_display(relay_data.expect("this should exist"))
+                        match relay_data {
+                            Some(relay_data) => Self::relay_display(relay_data),
+                            None => "[unknown relay]".into(),
+                        },
                     ),
                 );
             }
