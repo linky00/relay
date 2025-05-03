@@ -4,7 +4,9 @@ use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
 use relay_core::crypto::SecretKey;
 
-use crate::{run, textfiles::Textfiles};
+use crate::textfiles::Textfiles;
+
+mod run;
 
 #[derive(Parser)]
 #[command(version)]

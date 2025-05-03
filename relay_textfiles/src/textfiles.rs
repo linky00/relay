@@ -129,7 +129,7 @@ impl Textfiles {
         fs::write(
             dir_path.join(CONFIG_FILE_PATH),
             format!(
-                include_str!("file_templates/relay.toml"),
+                include_str!("templates/relay.toml"),
                 relay_name = relay_name,
                 default_listening_port = DEFAULT_LISTENING_PORT,
                 default_initial_ttl = DEFAULT_INITIAL_TTL,
@@ -138,7 +138,7 @@ impl Textfiles {
         )?;
         fs::write(
             dir_path.join(POEM_FILE_PATH),
-            include_str!("file_templates/poem.txt"),
+            include_str!("templates/poem.txt"),
         )?;
         fs::write(dir_path.join(LISTEN_FILE_PATH), "")?;
         fs::write(
