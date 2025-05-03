@@ -5,8 +5,9 @@ use relay_core::mailroom::{GetNextLine, NextLine};
 use relay_daemon::{
     config::{DaemonConfig, RelayData},
     daemon::Daemon,
-    event::{Event, HandleEvent},
+    event::Event,
 };
+use tokio::sync::mpsc;
 
 use crate::textfiles::Textfiles;
 
@@ -17,9 +18,15 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let poem = textfiles.read_poem()?;
 
     let line_generator = LineGenerator::new(relayt_config.name, poem);
-    let event_printer = EventPrinter {
-        textfiles: textfiles.clone(),
-    };
+    let event_printer = EventPrinter::new(textfiles.clone());
+
+    let (event_tx, mut event_rx) = mpsc::channel(8);
+    tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            event_printer.print(event);
+        }
+    });
+
     let secret_key = textfiles.read_secret()?;
     let db_url = textfiles.archive_path().as_os_str().try_into()?;
     let daemon_config = DaemonConfig {
@@ -30,23 +37,9 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 
     let relay_daemon = if textfiles.debug_mode() {
         println!("STARTING IN DEBUG MODE");
-        Daemon::new_fast(
-            line_generator,
-            event_printer,
-            secret_key,
-            db_url,
-            daemon_config,
-        )
-        .await
+        Daemon::new_fast(line_generator, event_tx, secret_key, db_url, daemon_config).await
     } else {
-        Daemon::new(
-            line_generator,
-            event_printer,
-            secret_key,
-            db_url,
-            daemon_config,
-        )
-        .await
+        Daemon::new(line_generator, event_tx, secret_key, db_url, daemon_config).await
     }?;
 
     relay_daemon.start_sender().await?;
@@ -99,13 +92,11 @@ struct EventPrinter {
 }
 
 impl EventPrinter {
-    fn relay_display(relay: RelayData) -> String {
-        format!("\"{}\"", relay.nickname.unwrap_or(relay.key.to_string()))
+    fn new(textfiles: Textfiles) -> Self {
+        EventPrinter { textfiles }
     }
-}
 
-impl HandleEvent for EventPrinter {
-    fn handle_event(&mut self, event: Event) {
+    fn print(&self, event: Event) {
         match event {
             Event::ListenerStartedListening(port) => {
                 println!("listener started listening on {port}");
@@ -194,5 +185,9 @@ impl HandleEvent for EventPrinter {
                 };
             }
         }
+    }
+
+    fn relay_display(relay: RelayData) -> String {
+        format!("\"{}\"", relay.nickname.unwrap_or(relay.key.to_string()))
     }
 }

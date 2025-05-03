@@ -12,20 +12,19 @@ use tokio::sync::Mutex;
 
 use crate::{
     config::DaemonConfig,
-    event::{self, Event, HandleEvent},
+    event::{Event, EventSender},
 };
 
 use super::archive::{DBArchive, DBError};
 
-pub async fn send_to_listeners<L, E>(
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
+pub async fn send_to_listeners<L>(
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
     config: &DaemonConfig,
-    event_handler: Arc<Mutex<E>>,
+    event_sender: EventSender,
 ) where
     L: GetNextLine + Send + 'static,
-    E: HandleEvent + Send + 'static,
 {
-    event::emit_event(&event_handler, Event::SenderBeginningRun).await;
+    event_sender.send(Event::SenderBeginningRun).await.ok();
 
     let now = Utc::now();
     let client = Client::new();
@@ -44,7 +43,7 @@ pub async fn send_to_listeners<L, E>(
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);
             let config = config.clone();
-            let event_handler = Arc::clone(&event_handler);
+            let event_sender = event_sender.clone();
 
             async move {
                 let outgoing_envelopes = match mailroom
@@ -55,8 +54,10 @@ pub async fn send_to_listeners<L, E>(
                 {
                     Ok(outgoing_envelopes) => outgoing_envelopes,
                     Err(error) => {
-                        event::emit_event(&event_handler, Event::SenderDBError(error.to_string()))
-                            .await;
+                        event_sender
+                            .send(Event::SenderDBError(error.to_string()))
+                            .await
+                            .ok();
                         return;
                     }
                 };
@@ -69,14 +70,13 @@ pub async fn send_to_listeners<L, E>(
                     .await
                 {
                     Ok(response) => {
-                        event::emit_event(
-                            &event_handler,
-                            Event::SenderSentToListener(
+                        event_sender
+                            .send(Event::SenderSentToListener(
                                 relay.clone(),
                                 outgoing_envelopes.envelopes,
-                            ),
-                        )
-                        .await;
+                            ))
+                            .await
+                            .ok();
 
                         let handle_response = async || {
                             if !response.status().is_success() {
@@ -122,14 +122,13 @@ pub async fn send_to_listeners<L, E>(
                         };
 
                         let event = handle_response().await.unwrap_or_else(|e| e);
-                        event::emit_event(&event_handler, event).await;
+                        event_sender.send(event).await.ok();
                     }
                     Err(error) => {
-                        event::emit_event(
-                            &event_handler,
-                            Event::SenderFailedSending(relay.clone(), error.to_string()),
-                        )
-                        .await;
+                        event_sender
+                            .send(Event::SenderFailedSending(relay.clone(), error.to_string()))
+                            .await
+                            .ok();
                     }
                 }
             }
@@ -138,18 +137,17 @@ pub async fn send_to_listeners<L, E>(
 
     future::join_all(handles).await;
 
-    event::emit_event(&event_handler, Event::SenderFinishedRun).await;
+    event_sender.send(Event::SenderFinishedRun).await.ok();
 }
 
-pub async fn respond_to_sender<L, E>(
+pub async fn respond_to_sender<L>(
     payload: &str,
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
     config: &DaemonConfig,
-    event_handler: Arc<Mutex<E>>,
+    event_sender: EventSender,
 ) -> Result<String, (StatusCode, String)>
 where
     L: GetNextLine,
-    E: HandleEvent + Send + 'static,
 {
     let now = Utc::now();
 
@@ -157,7 +155,10 @@ where
         Ok(untrusted_payload) => match untrusted_payload.try_trust(config.trusted_public_keys()) {
             Ok(trusted_payload) => trusted_payload,
             Err(_) => {
-                event::emit_event(&event_handler, Event::ListenerReceivedFromUntrustedSender).await;
+                event_sender
+                    .send(Event::ListenerReceivedFromUntrustedSender)
+                    .await
+                    .ok();
                 return Err((
                     StatusCode::FORBIDDEN,
                     "payload certificate key not trusted".to_owned(),
@@ -165,7 +166,10 @@ where
             }
         },
         Err(_) => {
-            event::emit_event(&event_handler, Event::ListenerReceivedBadPayload).await;
+            event_sender
+                .send(Event::ListenerReceivedBadPayload)
+                .await
+                .ok();
             return Err((StatusCode::BAD_REQUEST, "payload malformed".to_owned()));
         }
     };
@@ -183,11 +187,13 @@ where
         .await
     {
         Ok(()) => {
-            event::emit_event(
-                &event_handler,
-                Event::ListenerReceivedFromSender(relay_data, trusted_payload.envelopes().clone()),
-            )
-            .await;
+            event_sender
+                .send(Event::ListenerReceivedFromSender(
+                    relay_data,
+                    trusted_payload.envelopes().clone(),
+                ))
+                .await
+                .ok();
 
             let outgoing_envelopes = mailroom.get_outgoing_at_time(
                 &trusted_payload.public_key(),
@@ -198,8 +204,10 @@ where
             match outgoing_envelopes.await {
                 Ok(outgoing_envelopes) => Ok(outgoing_envelopes.create_payload()),
                 Err(error) => {
-                    event::emit_event(&event_handler, Event::ListenerDBError(error.to_string()))
-                        .await;
+                    event_sender
+                        .send(Event::ListenerDBError(error.to_string()))
+                        .await
+                        .ok();
                     Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "db error sorry".to_owned(),
@@ -208,18 +216,20 @@ where
             }
         }
         Err(MailroomError::AlreadyReceivedFromKey) => {
-            event::emit_event(
-                &event_handler,
-                Event::ListenerAlreadyReceivedFromSender(relay_data),
-            )
-            .await;
+            event_sender
+                .send(Event::ListenerAlreadyReceivedFromSender(relay_data))
+                .await
+                .ok();
             Err((
                 StatusCode::FORBIDDEN,
                 "already received payload with this certificate key this period".to_owned(),
             ))
         }
         Err(MailroomError::ArchiveFailure(error)) => {
-            event::emit_event(&event_handler, Event::ListenerDBError(error.to_string())).await;
+            event_sender
+                .send(Event::ListenerDBError(error.to_string()))
+                .await
+                .ok();
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "db error sorry".to_owned(),

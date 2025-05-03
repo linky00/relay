@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use chrono::Utc;
 use relay_core::{mailroom::Archive, message::Message};
 use sqlx::{
@@ -7,9 +5,8 @@ use sqlx::{
     migrate::{MigrateDatabase, MigrateError},
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
 
-use crate::event::{self, Event, HandleEvent};
+use crate::event::{Event, EventSender};
 
 #[derive(Error, Debug)]
 pub(crate) enum DBError {
@@ -23,13 +20,13 @@ pub(crate) enum DBError {
     Query(#[from] SqlxError),
 }
 
-pub(crate) struct DBArchive<E: HandleEvent> {
+pub(crate) struct DBArchive {
     pool: SqlitePool,
-    event_handler: Arc<Mutex<E>>,
+    event_sender: EventSender,
 }
 
-impl<E: HandleEvent> DBArchive<E> {
-    pub(crate) async fn new(db_url: &str, event_handler: Arc<Mutex<E>>) -> Result<Self, DBError> {
+impl DBArchive {
+    pub(crate) async fn new(db_url: &str, event_sender: EventSender) -> Result<Self, DBError> {
         let db_url = format!("sqlite:{db_url}");
 
         if !Sqlite::database_exists(&db_url).await.unwrap_or(false) {
@@ -47,17 +44,11 @@ impl<E: HandleEvent> DBArchive<E> {
             .await
             .map_err(|e| DBError::Migration(e))?;
 
-        Ok(Self {
-            pool,
-            event_handler,
-        })
+        Ok(Self { pool, event_sender })
     }
 }
 
-impl<E> Archive for DBArchive<E>
-where
-    E: HandleEvent + Send + 'static,
-{
+impl Archive for DBArchive {
     type Error = DBError;
 
     async fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error> {
@@ -113,11 +104,10 @@ where
             .last_insert_rowid()
         };
 
-        event::emit_event(
-            &self.event_handler,
-            Event::AddedMessageToArchive(envelope.message.clone()),
-        )
-        .await;
+        self.event_sender
+            .send(Event::AddedMessageToArchive(envelope.message.clone()))
+            .await
+            .ok();
 
         let envelope_id = sqlx::query!(
             "

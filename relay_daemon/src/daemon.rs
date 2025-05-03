@@ -13,7 +13,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{
     config::DaemonConfig,
-    event::{self, Event, HandleEvent},
+    event::{Event, EventSender},
 };
 
 mod archive;
@@ -31,30 +31,28 @@ pub enum DaemonError {
     CannotStartSender,
 }
 
-pub struct Daemon<L, E>
+pub struct Daemon<L>
 where
     L: GetNextLine,
-    E: HandleEvent + Send + 'static,
 {
-    state: Arc<Mutex<DaemonState<L, E>>>,
+    state: Arc<Mutex<DaemonState<L>>>,
     fast_mode: bool,
 }
 
-impl<L, E> Daemon<L, E>
+impl<L> Daemon<L>
 where
     L: GetNextLine + Sync + Send + 'static,
-    E: HandleEvent + Sync + Send + 'static,
 {
     pub async fn new(
         line_generator: L,
-        event_handler: E,
+        event_sender: EventSender,
         secret_key: SecretKey,
         db_url: &str,
         config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
         Ok(Self {
             state: Arc::new(Mutex::new(
-                DaemonState::new(line_generator, event_handler, secret_key, db_url, config).await?,
+                DaemonState::new(line_generator, event_sender, secret_key, db_url, config).await?,
             )),
             fast_mode: false,
         })
@@ -62,13 +60,13 @@ where
 
     pub async fn new_fast(
         line_generator: L,
-        event_handler: E,
+        event_sender: EventSender,
         secret_key: SecretKey,
         db_url: &str,
         config: DaemonConfig,
     ) -> Result<Self, DaemonError> {
         let mut daemon =
-            Self::new(line_generator, event_handler, secret_key, db_url, config).await?;
+            Self::new(line_generator, event_sender, secret_key, db_url, config).await?;
         daemon.fast_mode = true;
         Ok(daemon)
     }
@@ -93,7 +91,7 @@ where
                             exchange::send_to_listeners(
                                 Arc::clone(&state.mailroom),
                                 &state.config,
-                                Arc::clone(&state.event_handler),
+                                state.event_sender.clone(),
                             )
                             .await;
                         })
@@ -109,11 +107,13 @@ where
             .await
             .map_err(|_| DaemonError::CannotStartSender)?;
 
-        event::emit_event(
-            &self.state.lock().await.event_handler,
-            Event::SenderStartedSchedule,
-        )
-        .await;
+        self.state
+            .lock()
+            .await
+            .event_sender
+            .send(Event::SenderStartedSchedule)
+            .await
+            .ok();
 
         Ok(())
     }
@@ -137,17 +137,19 @@ where
                 .expect("should run indefinitely");
         });
 
-        event::emit_event(
-            &self.state.lock().await.event_handler,
-            Event::ListenerStartedListening(port),
-        )
-        .await;
+        self.state
+            .lock()
+            .await
+            .event_sender
+            .send(Event::ListenerStartedListening(port))
+            .await
+            .ok();
 
         Ok(())
     }
 
     async fn handle_request(
-        State(state): State<Arc<Mutex<DaemonState<L, E>>>>,
+        State(state): State<Arc<Mutex<DaemonState<L>>>>,
         body: String,
     ) -> impl IntoResponse {
         let state = state.lock().await;
@@ -155,7 +157,7 @@ where
             &body,
             Arc::clone(&state.mailroom),
             &state.config,
-            Arc::clone(&state.event_handler),
+            state.event_sender.clone(),
         )
         .await
     }
@@ -165,24 +167,22 @@ where
     }
 }
 
-struct DaemonState<L, E>
+struct DaemonState<L>
 where
     L: GetNextLine,
-    E: HandleEvent + Send + 'static,
 {
-    mailroom: Arc<Mutex<Mailroom<L, DBArchive<E>, DBError>>>,
-    event_handler: Arc<Mutex<E>>,
+    mailroom: Arc<Mutex<Mailroom<L, DBArchive, DBError>>>,
+    event_sender: EventSender,
     config: DaemonConfig,
 }
 
-impl<L, E> DaemonState<L, E>
+impl<L> DaemonState<L>
 where
     L: GetNextLine + Sync + Send + 'static,
-    E: HandleEvent + Sync + Send + 'static,
 {
     async fn new(
         line_generator: L,
-        event_handler: E,
+        event_sender: EventSender,
         secret_key: SecretKey,
         db_url: &str,
         config: DaemonConfig,
@@ -196,9 +196,7 @@ where
         };
         let interval = Duration::from_secs(10);
 
-        let event_handler = Arc::new(Mutex::new(event_handler));
-
-        let db_archive = DBArchive::new(db_url, Arc::clone(&event_handler))
+        let db_archive = DBArchive::new(db_url, event_sender.clone())
             .await
             .map_err(|_| DaemonError::CannotConnectToDB)?;
 
@@ -210,7 +208,7 @@ where
                 flatten_time,
                 interval,
             ))),
-            event_handler,
+            event_sender,
             config,
         })
     }
