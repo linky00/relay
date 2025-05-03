@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use relay_core::crypto::SecretKey;
 
@@ -37,16 +37,26 @@ pub async fn do_cli() -> Result<()> {
         match command {
             Commands::Init { directory } => {
                 let path = Path::new(&directory);
-                let relay_name = path
-                    .file_stem()
-                    .context("coudln't get file stem")?
-                    .try_into()?;
-                Textfiles::init_dir(&path, relay_name, &SecretKey::generate())?;
+                let relay_name = match path.file_name() {
+                    Some(os_str) => os_str.try_into().unwrap_or("relay"),
+                    None => "relay",
+                };
+                match Textfiles::init_dir(&path, relay_name, &SecretKey::generate()) {
+                    Ok(()) => {
+                        println!("Created relay directory \"{relay_name}\"")
+                    }
+                    Err(e) => {
+                        eprintln!("Could not create relay: {e}")
+                    }
+                }
             }
-            Commands::Start { directory } => {
-                let path = get_checked_dir_path(&directory).context("can't get file path")?;
-                run::run(&path).await?;
-            }
+            Commands::Start { directory } => match get_checked_dir_path(&directory) {
+                Ok(path) => match run::run(&path).await {
+                    Ok(()) => {}
+                    Err(e) => eprintln!("Could not start relay \"{directory}\": {e}"),
+                },
+                Err(_) => eprintln!("Could not open relay directory \"{directory}\""),
+            },
         }
     }
 
@@ -56,7 +66,6 @@ pub async fn do_cli() -> Result<()> {
 fn get_checked_dir_path(path_string: &str) -> Result<PathBuf> {
     let path = Path::new(&path_string);
     if !path.is_dir() {
-        eprintln!("\"{}\" cannot be read as a directory", path_string);
         return Err(anyhow!("can't read dir"));
     }
     Ok(path.into())
