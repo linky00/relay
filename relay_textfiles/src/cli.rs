@@ -53,7 +53,7 @@ pub async fn do_cli() -> Result<()> {
             Commands::Start { directory } => match get_checked_dir_path(&directory) {
                 Ok(path) => match run::run(&path).await {
                     Ok(()) => {}
-                    Err(e) => eprintln!("Could not start relay \"{directory}\": {e}"),
+                    Err(e) => eprintln!("Could not start relay: {e}"),
                 },
                 Err(_) => eprintln!("Could not open relay directory \"{directory}\""),
             },
