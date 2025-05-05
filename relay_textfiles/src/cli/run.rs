@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{fmt::Display, path::Path, sync::Arc};
 
 use anyhow::Result;
 use parking_lot::Mutex;
@@ -37,7 +37,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
         custom_max_forwarding_ttl: initial_relayt_config.max_forwarding_ttl,
     };
 
-    let relay_daemon = if textfiles.debug_mode() {
+    let mut relay_daemon = if textfiles.debug_mode() {
         println!("STARTING IN DEBUG MODE");
         Daemon::new_fast(line_generator, event_tx, secret_key, db_url, daemon_config).await
     } else {
@@ -61,12 +61,23 @@ pub async fn run(dir_path: &Path) -> Result<()> {
                     Ok(new_config) => {
                         if new_config.name != last_config.name {
                             *author.lock() = new_config.name.clone();
-                            print_from_source(
-                                Source::Config,
-                                format!("Updated line author: \"{}\"", new_config.name),
-                            );
                         }
+
+                        if new_config.trusted_relays != last_config.trusted_relays
+                            || new_config.initial_ttl != last_config.initial_ttl
+                            || new_config.max_forwarding_ttl != last_config.max_forwarding_ttl
+                        {
+                            relay_daemon
+                                .update_config(DaemonConfig {
+                                    trusted_relays: new_config.trusted_relays.clone(),
+                                    custom_initial_ttl: new_config.initial_ttl,
+                                    custom_max_forwarding_ttl: new_config.max_forwarding_ttl,
+                                })
+                                .await
+                        }
+
                         last_config = new_config;
+                        print_from_source(Source::Config, "Updated config");
                     }
                     Err(e) => {
                         print_from_source(Source::Config, format!("Can't read config: {e}"));
@@ -141,10 +152,10 @@ impl EventPrinter {
                 );
             }
             Event::ListenerReceivedBadPayload => {
-                print_from_source(Source::Listener, format!("Received bad payload"));
+                print_from_source(Source::Listener, "Received bad payload");
             }
             Event::ListenerReceivedFromUntrustedSender => {
-                print_from_source(Source::Listener, format!("Received from untrusted sender"));
+                print_from_source(Source::Listener, "Received from untrusted sender");
             }
             Event::ListenerDBError(error) => {
                 print_from_source(Source::Listener, format!("Had DB error: {error}"));
@@ -162,10 +173,10 @@ impl EventPrinter {
                 );
             }
             Event::SenderStartedSchedule => {
-                print_from_source(Source::Sender, format!("Started schedule"));
+                print_from_source(Source::Sender, "Started schedule");
             }
             Event::SenderBeginningRun => {
-                print_from_source(Source::Sender, format!("Beginning run"));
+                print_from_source(Source::Sender, "Beginning run");
             }
             Event::SenderDBError(error) => {
                 print_from_source(Source::Sender, format!("Had db error: {error}"));
@@ -229,7 +240,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderFinishedRun => {
-                print_from_source(Source::Sender, format!("Finished run"));
+                print_from_source(Source::Sender, "Finished run");
             }
             Event::AddedMessageToArchive(message) => {
                 print_from_source(
@@ -262,7 +273,7 @@ enum Source {
     Config,
 }
 
-fn print_from_source(source: Source, line: String) {
+fn print_from_source<S: Display>(source: Source, line: S) {
     println!(
         "{}{line}",
         match source {

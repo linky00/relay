@@ -5,7 +5,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use thiserror::Error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DaemonConfig {
     pub trusted_relays: Vec<RelayData>,
     pub custom_initial_ttl: Option<u8>,
@@ -29,7 +29,7 @@ pub enum RelayDataError {
     UrlNotValid,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelayData {
     pub key: PublicKey,
     pub nickname: Option<String>,
