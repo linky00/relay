@@ -1,12 +1,6 @@
 # name of the relay
 name = "{relay_name}"
 
-# is this a listener relay?
-listening = false
-
-# port for listening
-# listening_port = {default_listening_port}
-
 # initial ttl for created envelopes
 # initial_ttl = {default_initial_ttl}
 
@@ -19,3 +13,9 @@ listening = false
 # key = ""
 # nickname = ""
 # # endpoint = ""
+
+# enable listener
+# [listener]
+
+# listening port
+# port = {default_listening_port}

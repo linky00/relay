@@ -46,10 +46,8 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 
     relay_daemon.start_sender().await?;
 
-    if initial_relayt_config.listening {
-        relay_daemon
-            .start_listener(initial_relayt_config.listening_port)
-            .await?;
+    if let Some(listening_config) = &initial_relayt_config.listener {
+        relay_daemon.start_listener(listening_config.port).await?;
     }
 
     let mut config_change_rx = textfiles.watch_config_changes()?;
@@ -76,8 +74,18 @@ pub async fn run(dir_path: &Path) -> Result<()> {
                                 .await
                         }
 
+                        if new_config.listener != last_config.listener {
+                            print_from_source(
+                                Source::Config,
+                                "Can't update listener at runtime yet!",
+                            );
+                        }
+
+                        if last_config != new_config {
+                            print_from_source(Source::Config, "Updated config");
+                        }
+
                         last_config = new_config;
-                        print_from_source(Source::Config, "Updated config");
                     }
                     Err(e) => {
                         print_from_source(Source::Config, format!("Can't read config: {e}"));
