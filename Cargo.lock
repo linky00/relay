@@ -1530,6 +1530,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "notify-debouncer-mini"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a689eb4262184d9a1727f9087cd03883ea716682ab03ed24efec57d7716dccb8"
+dependencies = [
+ "log",
+ "notify",
+ "notify-types",
+ "tempfile",
+]
+
+[[package]]
 name = "notify-types"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1884,6 +1896,8 @@ dependencies = [
  "anyhow",
  "clap",
  "notify",
+ "notify-debouncer-mini",
+ "parking_lot",
  "pem",
  "relay_core",
  "relay_daemon",

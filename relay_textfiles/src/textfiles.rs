@@ -2,9 +2,13 @@ use std::{
     fs::{self, File},
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 
-use notify::{Event, RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode};
+use notify_debouncer_mini::{DebouncedEvent, Debouncer};
+use parking_lot::Mutex;
 use pem::{Pem, PemError};
 use relay_core::{
     crypto::SecretKey,
@@ -12,7 +16,7 @@ use relay_core::{
 };
 use relay_daemon::daemon::DEFAULT_LISTENING_PORT;
 use thiserror::Error;
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 use crate::config::RelaytConfig;
 
@@ -24,7 +28,7 @@ const PUBLIC_FILE_PATH: &str = "public.txt";
 const ARCHIVE_FILE_PATH: &str = "store/archive.db";
 const SECRET_FILE_PATH: &str = "store/secret.pem";
 
-type WatcherReceiver = Receiver<Result<Event, notify::Error>>;
+type WatcherReceiver = UnboundedReceiver<Result<Vec<DebouncedEvent>, notify::Error>>;
 
 #[derive(Error, Debug)]
 pub enum TextfilesError {
@@ -58,6 +62,7 @@ pub struct Textfiles {
     listen_path: PathBuf,
     archive_path: PathBuf,
     secret_path: PathBuf,
+    watchers: Arc<Mutex<Vec<Box<Debouncer<RecommendedWatcher>>>>>,
 }
 
 impl Textfiles {
@@ -87,28 +92,30 @@ impl Textfiles {
             listen_path,
             archive_path,
             secret_path,
+            watchers: Arc::new(Mutex::new(vec![])),
         })
     }
 
     pub fn watch_config_changes(&self) -> Result<WatcherReceiver, TextfilesError> {
-        Self::watch_file(&self.config_path)
+        self.watch_file(self.config_path.clone())
     }
 
     pub fn watch_poem_changes(&self) -> Result<WatcherReceiver, TextfilesError> {
-        Self::watch_file(&self.poem_path)
+        self.watch_file(self.poem_path.clone())
     }
 
-    fn watch_file(path: &Path) -> Result<WatcherReceiver, TextfilesError> {
-        let (tx, rx) = mpsc::channel(1);
+    fn watch_file(&self, path: PathBuf) -> Result<WatcherReceiver, TextfilesError> {
+        let (tx, rx) = mpsc::unbounded_channel();
 
-        let mut watcher = notify::recommended_watcher(move |res| {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                let _ = tx.send(res).await;
-            });
-        })?;
+        let mut debouncer =
+            notify_debouncer_mini::new_debouncer(Duration::from_secs(1), move |event| {
+                let _ = tx.send(event);
+            })?;
 
-        watcher.watch(path, RecursiveMode::Recursive)?;
+        let watcher = debouncer.watcher();
+        watcher.watch(&path, RecursiveMode::Recursive)?;
+
+        self.watchers.lock().push(Box::new(debouncer));
 
         Ok(rx)
     }

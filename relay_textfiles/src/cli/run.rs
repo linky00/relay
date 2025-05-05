@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
+use parking_lot::Mutex;
 use relay_core::mailroom::{GetNextLine, NextLine};
 use relay_daemon::{
     config::{DaemonConfig, RelayData},
@@ -14,10 +15,11 @@ use crate::textfiles::Textfiles;
 pub async fn run(dir_path: &Path) -> Result<()> {
     let textfiles = Textfiles::new(dir_path)?;
 
-    let relayt_config = textfiles.read_config()?;
+    let initial_relayt_config = textfiles.read_config()?;
     let poem = textfiles.read_poem()?;
 
-    let line_generator = LineGenerator::new(relayt_config.name, poem);
+    let line_generator = LineGenerator::new(initial_relayt_config.name.clone(), poem);
+    let author = line_generator.author.clone();
 
     let event_printer = EventPrinter::new(textfiles.clone());
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
@@ -30,9 +32,9 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     let secret_key = textfiles.read_secret()?;
     let db_url = textfiles.archive_path().as_os_str().try_into()?;
     let daemon_config = DaemonConfig {
-        trusted_relays: relayt_config.trusted_relays,
-        custom_initial_ttl: relayt_config.initial_ttl,
-        custom_max_forwarding_ttl: relayt_config.max_forwarding_ttl,
+        trusted_relays: initial_relayt_config.trusted_relays.clone(),
+        custom_initial_ttl: initial_relayt_config.initial_ttl,
+        custom_max_forwarding_ttl: initial_relayt_config.max_forwarding_ttl,
     };
 
     let relay_daemon = if textfiles.debug_mode() {
@@ -44,11 +46,35 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 
     relay_daemon.start_sender().await?;
 
-    if relayt_config.listening {
+    if initial_relayt_config.listening {
         relay_daemon
-            .start_listener(relayt_config.listening_port)
+            .start_listener(initial_relayt_config.listening_port)
             .await?;
     }
+
+    let mut config_change_rx = textfiles.watch_config_changes()?;
+    tokio::spawn(async move {
+        let mut last_config = initial_relayt_config;
+        while let Some(events) = config_change_rx.recv().await {
+            if let Ok(_) = events {
+                match textfiles.read_config() {
+                    Ok(new_config) => {
+                        if new_config.name != last_config.name {
+                            *author.lock() = new_config.name.clone();
+                            print_from_source(
+                                Source::Config,
+                                format!("Updated line author: \"{}\"", new_config.name),
+                            );
+                        }
+                        last_config = new_config;
+                    }
+                    Err(e) => {
+                        print_from_source(Source::Config, format!("Can't read config: {e}"));
+                    }
+                }
+            }
+        }
+    });
 
     tokio::signal::ctrl_c().await?;
 
@@ -56,7 +82,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
 }
 
 struct LineGenerator {
-    author: String,
+    author: Arc<Mutex<String>>,
     poem: Vec<String>,
     n: usize,
 }
@@ -64,7 +90,7 @@ struct LineGenerator {
 impl LineGenerator {
     fn new<S: Into<String>>(author: S, poem: Vec<String>) -> Self {
         Self {
-            author: author.into(),
+            author: Arc::new(Mutex::new(author.into())),
             poem,
             n: 0,
         }
@@ -76,7 +102,7 @@ impl GetNextLine for LineGenerator {
         let next_line = if let Some(line) = self.poem.get(self.n) {
             Some(NextLine {
                 line: line.to_owned(),
-                author: self.author.clone(),
+                author: self.author.lock().clone(),
             })
         } else {
             None
@@ -85,12 +111,6 @@ impl GetNextLine for LineGenerator {
         self.n %= self.poem.len();
         next_line
     }
-}
-
-enum Source {
-    Listener,
-    Sender,
-    Archive,
 }
 
 struct EventPrinter {
@@ -105,10 +125,10 @@ impl EventPrinter {
     fn print_event(&self, event: Event) {
         match event {
             Event::ListenerStartedListening(port) => {
-                Self::print_from_source(Source::Listener, format!("Started listening on {port}"));
+                print_from_source(Source::Listener, format!("Started listening on {port}"));
             }
             Event::ListenerReceivedFromSender(relay_data, envelopes) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Listener,
                     format!(
                         "Received {} envelopes from sender relay {}",
@@ -121,19 +141,16 @@ impl EventPrinter {
                 );
             }
             Event::ListenerReceivedBadPayload => {
-                Self::print_from_source(Source::Listener, format!("Received bad payload"));
+                print_from_source(Source::Listener, format!("Received bad payload"));
             }
             Event::ListenerReceivedFromUntrustedSender => {
-                Self::print_from_source(
-                    Source::Listener,
-                    format!("Received from untrusted sender"),
-                );
+                print_from_source(Source::Listener, format!("Received from untrusted sender"));
             }
             Event::ListenerDBError(error) => {
-                Self::print_from_source(Source::Listener, format!("Had DB error: {error}"));
+                print_from_source(Source::Listener, format!("Had DB error: {error}"));
             }
             Event::ListenerAlreadyReceivedFromSender(relay_data) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Listener,
                     format!(
                         "Already received from sender relay {}",
@@ -145,16 +162,16 @@ impl EventPrinter {
                 );
             }
             Event::SenderStartedSchedule => {
-                Self::print_from_source(Source::Sender, format!("Started schedule"));
+                print_from_source(Source::Sender, format!("Started schedule"));
             }
             Event::SenderBeginningRun => {
-                Self::print_from_source(Source::Sender, format!("Beginning run"));
+                print_from_source(Source::Sender, format!("Beginning run"));
             }
             Event::SenderDBError(error) => {
-                Self::print_from_source(Source::Sender, format!("Had db error: {error}"));
+                print_from_source(Source::Sender, format!("Had db error: {error}"));
             }
             Event::SenderSentToListener(relay, envelopes) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Sent {} envelopes listener relay {}",
@@ -164,7 +181,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderReceivedFromListener(relay, envelopes) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Received {} envelopes from listener relay {}",
@@ -174,7 +191,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderFailedSending(relay, error) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Failed sending to listener relay {}: {}",
@@ -184,7 +201,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderReceivedHttpError(relay, error) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Received http error from listener relay {}: {}",
@@ -194,7 +211,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderReceivedBadResponse(relay) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Received bad response from listener relay {}",
@@ -203,7 +220,7 @@ impl EventPrinter {
                 );
             }
             Event::SenderAlreadyReceivedFromListener(relay) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Sender,
                     format!(
                         "Already received from listener relay {}",
@@ -212,10 +229,10 @@ impl EventPrinter {
                 );
             }
             Event::SenderFinishedRun => {
-                Self::print_from_source(Source::Sender, format!("Finished run"));
+                print_from_source(Source::Sender, format!("Finished run"));
             }
             Event::AddedMessageToArchive(message) => {
-                Self::print_from_source(
+                print_from_source(
                     Source::Archive,
                     format!("Adding message to archive: \"{}\"", message.contents.line),
                 );
@@ -223,7 +240,7 @@ impl EventPrinter {
                 match self.textfiles.write_listen(&message.contents.line) {
                     Ok(_) => {}
                     Err(e) => {
-                        Self::print_from_source(
+                        print_from_source(
                             Source::Archive,
                             format!("Can't write to listen.txt: {e}"),
                         );
@@ -233,18 +250,26 @@ impl EventPrinter {
         }
     }
 
-    fn print_from_source(source: Source, line: String) {
-        println!(
-            "{}{line}",
-            match source {
-                Source::Listener => "[Listener] ",
-                Source::Sender => "[Sender]   ",
-                Source::Archive => "[Archive]  ",
-            }
-        )
-    }
-
     fn relay_display(relay: RelayData) -> String {
         format!("\"{}\"", relay.nickname.unwrap_or(relay.key.to_string()))
     }
+}
+
+enum Source {
+    Listener,
+    Sender,
+    Archive,
+    Config,
+}
+
+fn print_from_source(source: Source, line: String) {
+    println!(
+        "{}{line}",
+        match source {
+            Source::Listener => "[Listener] ",
+            Source::Sender => "[Sender]   ",
+            Source::Archive => "[Archive]  ",
+            Source::Config => "[Config]   ",
+        }
+    )
 }
