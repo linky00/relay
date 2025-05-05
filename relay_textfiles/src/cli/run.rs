@@ -38,7 +38,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
     };
 
     let mut relay_daemon = if textfiles.debug_mode() {
-        println!("STARTING IN DEBUG MODE");
+        println!("DEBUG MODE");
         Daemon::new_fast(line_generator, event_tx, secret_key, db_url, daemon_config).await
     } else {
         Daemon::new(line_generator, event_tx, secret_key, db_url, daemon_config).await
