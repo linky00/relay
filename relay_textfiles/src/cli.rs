@@ -22,14 +22,17 @@ enum Commands {
     Init {
         /// Directory to initialize
         dir: String,
-        /// Optional separate storage directory to initialize
-        store_dir: Option<String>,
         /// Relay name (defaults to directory name)
         #[arg(short, long)]
         name: Option<String>,
         /// Init with debug mode config
         #[arg(short, long)]
         debug: bool,
+    },
+    /// Create a store directory only
+    InitStore {
+        /// Store directory to initialize
+        dir: String,
     },
     /// Run a relay using given directory
     Start {
@@ -48,27 +51,26 @@ pub async fn do_cli() -> Result<()> {
 
     if let Some(command) = cli.command {
         match command {
-            Commands::Init {
-                dir,
-                store_dir,
-                name,
-                debug,
-            } => {
+            Commands::Init { dir, name, debug } => {
                 let path = Path::new(&dir);
-                let store_path = store_dir.as_ref().map(|dir| Path::new(dir));
                 let relay_name = name.as_deref().unwrap_or(get_relay_name_from_dir(path));
-                match Textfiles::init_dir(
-                    &path,
-                    store_path,
-                    relay_name,
-                    &SecretKey::generate(),
-                    debug,
-                ) {
+                match Textfiles::init_regular(&path, relay_name, &SecretKey::generate(), debug) {
                     Ok(()) => {
                         println!("Created relay \"{relay_name}\"")
                     }
                     Err(e) => {
                         eprintln!("Could not create relay: {e}")
+                    }
+                }
+            }
+            Commands::InitStore { dir } => {
+                let path = Path::new(&dir);
+                match Textfiles::init_store(&path, &SecretKey::generate()) {
+                    Ok(()) => {
+                        println!("Created store directory")
+                    }
+                    Err(e) => {
+                        eprintln!("Could not create store directory: {e}")
                     }
                 }
             }

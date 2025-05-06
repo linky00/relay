@@ -62,29 +62,23 @@ pub struct Textfiles {
 }
 
 impl Textfiles {
-    pub fn init_dir(
+    pub fn init_regular(
         dir_path: &Path,
-        store_dir_path: Option<&Path>,
         relay_name: &str,
         secret_key: &SecretKey,
         debug_mode: bool,
     ) -> Result<(), TextfilesError> {
-        let paths = Paths::new(dir_path, store_dir_path, debug_mode);
+        let paths = Paths::new(dir_path, None, debug_mode);
 
         fs::create_dir_all(dir_path)?;
         if fs::read_dir(dir_path)?.next().is_some() {
             return Err(TextfilesError::InitDirNotEmpty);
         };
 
-        if let Some(store_dir_path) = store_dir_path {
-            fs::create_dir_all(store_dir_path)?;
-            if fs::read_dir(dir_path)?.next().is_some() {
-                return Err(TextfilesError::InitDirNotEmpty);
-            };
-        }
+        fs::create_dir_all(dir_path.join(STORE_DIR_PATH))?;
 
         fs::write(
-            paths.config_path,
+            &paths.config_path,
             format!(
                 include_str!("templates/relay.toml"),
                 relay_name = relay_name,
@@ -93,17 +87,31 @@ impl Textfiles {
                 default_max_forwarding_ttl = DEFAULT_MAX_FORWARDING_TTL
             ),
         )?;
-        fs::write(paths.poem_path, include_str!("templates/poem.txt"))?;
+        fs::write(&paths.poem_path, include_str!("templates/poem.txt"))?;
 
-        if let Some(store_dir_path) = store_dir_path {
-            fs::create_dir_all(store_dir_path)?;
-        } else {
-            fs::create_dir_all(dir_path.join(STORE_DIR_PATH))?;
-        }
-        fs::write(paths.listen_path, "")?;
-        fs::write(paths.public_path, secret_key.public_key().to_string())?;
+        Self::init_store_files(&paths, secret_key)?;
+
+        Ok(())
+    }
+
+    pub fn init_store(dir_path: &Path, secret_key: &SecretKey) -> Result<(), TextfilesError> {
+        let paths = Paths::new(dir_path, Some(dir_path), false);
+
+        fs::create_dir_all(dir_path)?;
+        if fs::read_dir(dir_path)?.next().is_some() {
+            return Err(TextfilesError::InitDirNotEmpty);
+        };
+
+        Self::init_store_files(&paths, secret_key)?;
+
+        Ok(())
+    }
+
+    fn init_store_files(paths: &Paths, secret_key: &SecretKey) -> Result<(), TextfilesError> {
+        fs::write(&paths.listen_path, "")?;
+        fs::write(&paths.public_path, secret_key.public_key().to_string())?;
         fs::write(
-            paths.secret_path,
+            &paths.secret_path,
             pem::encode(&Pem::new("SECRET", secret_key.as_bytes())),
         )?;
 
