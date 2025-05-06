@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO envelopes (from_key, ttl, received_at, message_id)\n            VALUES (?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "81c2f307d8001c418f9f70028b83c41b5428fdb2dc28e536fc8efe97ad9ad43e"
+}

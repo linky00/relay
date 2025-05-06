@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO forwards (from_key, envelope_id)\n                VALUES (?, ?)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e955fa63c531e40f9f5d26cc020bb9ce4758fa32ec1e1c4f59cf447b69a3e847"
+}

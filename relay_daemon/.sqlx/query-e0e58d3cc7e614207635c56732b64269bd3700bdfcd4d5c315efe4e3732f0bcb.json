@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id\n            FROM messages\n            WHERE signature = ?\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e0e58d3cc7e614207635c56732b64269bd3700bdfcd4d5c315efe4e3732f0bcb"
+}
