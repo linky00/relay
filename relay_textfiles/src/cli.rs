@@ -91,13 +91,10 @@ pub async fn do_cli() -> Result<()> {
                     None
                 };
                 match get_checked_dir_path(&dir) {
-                    Ok(path) => {
-                        println!("Starting relay \"{}\"...", get_relay_name_from_dir(&path));
-                        match run::run(&path, store_path.as_deref(), debug).await {
-                            Ok(()) => {}
-                            Err(e) => eprintln!("Could not start relay: {e}"),
-                        }
-                    }
+                    Ok(path) => match run::run(&path, store_path.as_deref(), debug).await {
+                        Ok(()) => {}
+                        Err(e) => eprintln!("Could not start relay: {e}"),
+                    },
                     Err(_) => eprintln!("Could not open relay directory \"{dir}\""),
                 }
             }

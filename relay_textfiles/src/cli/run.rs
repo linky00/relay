@@ -42,6 +42,9 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
         custom_max_forwarding_ttl: initial_relayt_config.max_forwarding_ttl,
     };
 
+    println!("Starting relay \"{}\"...", initial_relayt_config.name);
+    println!("Public key: {}", secret_key.public_key());
+
     let mut relay_daemon = if debug_mode {
         println!("DEBUG MODE");
         Daemon::new_fast(
