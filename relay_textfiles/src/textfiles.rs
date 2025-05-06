@@ -177,6 +177,8 @@ impl Textfiles {
     pub fn read_poem(&self) -> Result<Vec<String>, TextfilesError> {
         Ok(fs::read_to_string(&self.paths.poem_path)?
             .lines()
+            .map(|line| line.trim())
+            .filter(|line| line.len() > 0)
             .map(String::from)
             .collect())
     }

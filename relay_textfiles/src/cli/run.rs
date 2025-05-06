@@ -16,10 +16,15 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     let textfiles = Textfiles::new(dir_path, store_dir_path, debug_mode)?;
 
     let initial_relayt_config = textfiles.read_config()?;
-    let poem = textfiles.read_poem()?;
+    let initial_poem = textfiles.read_poem()?;
 
-    let line_generator = LineGenerator::new(initial_relayt_config.name.clone(), poem);
-    let author = line_generator.author.clone();
+    let line_generator_wrapper = LineGeneratorWrapper {
+        line_generator: Arc::new(Mutex::new(LineGenerator::new(
+            initial_relayt_config.name.clone(),
+            initial_poem.clone(),
+        ))),
+    };
+    let line_generator = line_generator_wrapper.line_generator.clone();
 
     let event_printer = EventPrinter::new(textfiles.clone());
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
@@ -39,9 +44,23 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
 
     let mut relay_daemon = if debug_mode {
         println!("DEBUG MODE");
-        Daemon::new_fast(line_generator, event_tx, secret_key, db_url, daemon_config).await
+        Daemon::new_fast(
+            line_generator_wrapper,
+            event_tx,
+            secret_key,
+            db_url,
+            daemon_config,
+        )
+        .await
     } else {
-        Daemon::new(line_generator, event_tx, secret_key, db_url, daemon_config).await
+        Daemon::new(
+            line_generator_wrapper,
+            event_tx,
+            secret_key,
+            db_url,
+            daemon_config,
+        )
+        .await
     }?;
 
     relay_daemon.start_sender().await?;
@@ -51,14 +70,16 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     }
 
     let mut config_change_rx = textfiles.watch_config_changes()?;
+    let textfiles_clone = textfiles.clone();
+    let line_generator_clone = Arc::clone(&line_generator);
     tokio::spawn(async move {
         let mut last_config = initial_relayt_config;
         while let Some(events) = config_change_rx.recv().await {
             if let Ok(_) = events {
-                match textfiles.read_config() {
+                match textfiles_clone.read_config() {
                     Ok(new_config) => {
                         if new_config.name != last_config.name {
-                            *author.lock() = new_config.name.clone();
+                            line_generator_clone.lock().author = new_config.name.clone();
                         }
 
                         if new_config.trusted_relays != last_config.trusted_relays
@@ -95,40 +116,75 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
         }
     });
 
+    let mut poem_change_rx = textfiles.watch_poem_changes()?;
+    tokio::spawn(async move {
+        let mut last_poem = initial_poem;
+        while let Some(events) = poem_change_rx.recv().await {
+            if let Ok(_) = events {
+                match textfiles.read_poem() {
+                    Ok(new_poem) => {
+                        if new_poem != last_poem {
+                            line_generator.lock().update_poem(new_poem.clone());
+                            print_from_source(Source::Poem, "Updated poem");
+                        }
+
+                        last_poem = new_poem;
+                    }
+                    Err(e) => {
+                        print_from_source(Source::Poem, format!("Can't read poem: {e}"));
+                    }
+                }
+            }
+        }
+    });
+
     tokio::signal::ctrl_c().await?;
 
     Ok(())
 }
 
+struct LineGeneratorWrapper {
+    line_generator: Arc<Mutex<LineGenerator>>,
+}
+
+impl GetNextLine for LineGeneratorWrapper {
+    fn get_next_line(&mut self) -> Option<NextLine> {
+        self.line_generator.lock().get_next_line()
+    }
+}
+
 struct LineGenerator {
-    author: Arc<Mutex<String>>,
+    author: String,
     poem: Vec<String>,
-    n: usize,
+    i: usize,
 }
 
 impl LineGenerator {
     fn new<S: Into<String>>(author: S, poem: Vec<String>) -> Self {
         Self {
-            author: Arc::new(Mutex::new(author.into())),
+            author: author.into(),
             poem,
-            n: 0,
+            i: 0,
         }
     }
-}
 
-impl GetNextLine for LineGenerator {
     fn get_next_line(&mut self) -> Option<NextLine> {
-        let next_line = if let Some(line) = self.poem.get(self.n) {
+        let next_line = if let Some(line) = self.poem.get(self.i) {
             Some(NextLine {
                 line: line.to_owned(),
-                author: self.author.lock().clone(),
+                author: self.author.clone(),
             })
         } else {
             None
         };
-        self.n += 1;
-        self.n %= self.poem.len();
+        self.i += 1;
+        self.i %= self.poem.len();
         next_line
+    }
+
+    fn update_poem(&mut self, poem: Vec<String>) {
+        self.poem = poem;
+        self.i = 0;
     }
 }
 
@@ -279,6 +335,7 @@ enum Source {
     Sender,
     Archive,
     Config,
+    Poem,
 }
 
 fn print_from_source<S: Display>(source: Source, line: S) {
@@ -289,6 +346,7 @@ fn print_from_source<S: Display>(source: Source, line: S) {
             Source::Sender => "[Sender]   ",
             Source::Archive => "[Archive]  ",
             Source::Config => "[Config]   ",
+            Source::Poem => "[Poem]     ",
         }
     )
 }
