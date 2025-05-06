@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 
 use crate::textfiles::Textfiles;
 
-pub async fn run(dir_path: &Path) -> Result<()> {
-    let textfiles = Textfiles::new(dir_path)?;
+pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: bool) -> Result<()> {
+    let textfiles = Textfiles::new(dir_path, store_dir_path, debug_mode)?;
 
     let initial_relayt_config = textfiles.read_config()?;
     let poem = textfiles.read_poem()?;
@@ -37,7 +37,7 @@ pub async fn run(dir_path: &Path) -> Result<()> {
         custom_max_forwarding_ttl: initial_relayt_config.max_forwarding_ttl,
     };
 
-    let mut relay_daemon = if textfiles.debug_mode() {
+    let mut relay_daemon = if debug_mode {
         println!("DEBUG MODE");
         Daemon::new_fast(line_generator, event_tx, secret_key, db_url, daemon_config).await
     } else {

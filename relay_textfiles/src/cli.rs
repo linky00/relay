@@ -21,12 +21,22 @@ enum Commands {
     /// Create a relay directory
     Init {
         /// Directory to initialize
-        directory: String,
+        dir: String,
+        /// Optional separate storage directory to initialize
+        store_dir: Option<String>,
+        /// Init with debug mode config
+        #[arg(short, long)]
+        debug: bool,
     },
     /// Run a relay using given directory
     Start {
         /// Relay directory
-        directory: String,
+        dir: String,
+        /// Optional separate storage directory
+        store_dir: Option<String>,
+        /// Enable debug mode
+        #[arg(short, long)]
+        debug: bool,
     },
 }
 
@@ -35,10 +45,21 @@ pub async fn do_cli() -> Result<()> {
 
     if let Some(command) = cli.command {
         match command {
-            Commands::Init { directory } => {
-                let path = Path::new(&directory);
+            Commands::Init {
+                dir,
+                store_dir,
+                debug,
+            } => {
+                let path = Path::new(&dir);
+                let store_path = store_dir.as_ref().map(|dir| Path::new(dir));
                 let relay_name = get_relay_name_from_dir(path);
-                match Textfiles::init_dir(&path, relay_name, &SecretKey::generate()) {
+                match Textfiles::init_dir(
+                    &path,
+                    store_path,
+                    relay_name,
+                    &SecretKey::generate(),
+                    debug,
+                ) {
                     Ok(()) => {
                         println!("Created relay directory \"{relay_name}\"")
                     }
@@ -47,16 +68,33 @@ pub async fn do_cli() -> Result<()> {
                     }
                 }
             }
-            Commands::Start { directory } => match get_checked_dir_path(&directory) {
-                Ok(path) => {
-                    println!("Starting relay \"{}\"...", get_relay_name_from_dir(&path));
-                    match run::run(&path).await {
-                        Ok(()) => {}
-                        Err(e) => eprintln!("Could not start relay: {e}"),
+            Commands::Start {
+                dir,
+                store_dir,
+                debug,
+            } => {
+                let store_path = if let Some(store_dir) = store_dir {
+                    match get_checked_dir_path(&store_dir) {
+                        Ok(store_path) => Some(store_path),
+                        Err(_) => {
+                            eprintln!("Could not open store directory \"{store_dir}\"");
+                            return Ok(());
+                        }
                     }
+                } else {
+                    None
+                };
+                match get_checked_dir_path(&dir) {
+                    Ok(path) => {
+                        println!("Starting relay \"{}\"...", get_relay_name_from_dir(&path));
+                        match run::run(&path, store_path.as_deref(), debug).await {
+                            Ok(()) => {}
+                            Err(e) => eprintln!("Could not start relay: {e}"),
+                        }
+                    }
+                    Err(_) => eprintln!("Could not open relay directory \"{dir}\""),
                 }
-                Err(_) => eprintln!("Could not open relay directory \"{directory}\""),
-            },
+            }
         }
     }
 
