@@ -24,6 +24,9 @@ enum Commands {
         dir: String,
         /// Optional separate storage directory to initialize
         store_dir: Option<String>,
+        /// Relay name (defaults to directory name)
+        #[arg(short, long)]
+        name: Option<String>,
         /// Init with debug mode config
         #[arg(short, long)]
         debug: bool,
@@ -48,11 +51,12 @@ pub async fn do_cli() -> Result<()> {
             Commands::Init {
                 dir,
                 store_dir,
+                name,
                 debug,
             } => {
                 let path = Path::new(&dir);
                 let store_path = store_dir.as_ref().map(|dir| Path::new(dir));
-                let relay_name = get_relay_name_from_dir(path);
+                let relay_name = name.as_deref().unwrap_or(get_relay_name_from_dir(path));
                 match Textfiles::init_dir(
                     &path,
                     store_path,
@@ -61,7 +65,7 @@ pub async fn do_cli() -> Result<()> {
                     debug,
                 ) {
                     Ok(()) => {
-                        println!("Created relay directory \"{relay_name}\"")
+                        println!("Created relay \"{relay_name}\"")
                     }
                     Err(e) => {
                         eprintln!("Could not create relay: {e}")
