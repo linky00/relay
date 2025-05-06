@@ -126,7 +126,7 @@ where
                 Job::new_async(
                     match self.fast_mode {
                         true => "*/10 * * * * *",
-                        false => "0 * * * * *",
+                        false => "0 0 * * * *",
                     },
                     move |_, _| {
                         let mailroom = Arc::clone(&mailroom);
