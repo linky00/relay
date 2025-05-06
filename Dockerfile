@@ -8,8 +8,10 @@ RUN cargo install --path ./relay_textfiles
 
 WORKDIR /
 
-RUN relayt init-store store
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 7070
+VOLUME /config /store
 
-CMD ["relayt", "start", "config", "store"]
+ENTRYPOINT ["/entrypoint.sh"]
