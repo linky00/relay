@@ -53,6 +53,10 @@ impl RelayData {
             endpoint,
         })
     }
+
+    pub fn endpoint(&self) -> Option<&Url> {
+        self.endpoint.as_ref()
+    }
 }
 
 impl Serialize for RelayData {

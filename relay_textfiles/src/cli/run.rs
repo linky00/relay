@@ -13,6 +13,10 @@ use tokio::sync::mpsc;
 use crate::textfiles::Textfiles;
 
 pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: bool) -> Result<()> {
+    if debug_mode {
+        println!("Debug mode!");
+    }
+
     let textfiles = Textfiles::new(dir_path, store_dir_path, debug_mode)?;
 
     let initial_relayt_config = textfiles.read_config()?;
@@ -44,9 +48,13 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
 
     println!("Starting relay \"{}\"...", initial_relayt_config.name);
     println!("Public key: {}", secret_key.public_key());
+    print!("{initial_relayt_config}");
+    if initial_poem.len() > 0 {
+        println!("Poem:");
+        print_poem(&initial_poem);
+    }
 
     let mut relay_daemon = if debug_mode {
-        println!("DEBUG MODE");
         Daemon::new_fast(
             line_generator_wrapper,
             event_tx,
@@ -105,8 +113,9 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
                             );
                         }
 
-                        if last_config != new_config {
-                            print_from_source(Source::Config, "Updated config");
+                        if new_config != last_config {
+                            print_from_source(Source::Config, "Updated config:");
+                            print!("{new_config}");
                         }
 
                         last_config = new_config;
@@ -128,7 +137,8 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
                     Ok(new_poem) => {
                         if new_poem != last_poem {
                             line_generator.lock().update_poem(new_poem.clone());
-                            print_from_source(Source::Poem, "Updated poem");
+                            print_from_source(Source::Poem, "Updated poem:");
+                            print_poem(&new_poem);
                         }
 
                         last_poem = new_poem;
@@ -365,4 +375,14 @@ fn print_from_source<S: Display>(source: Source, line: S) {
             Source::Poem => "[Poem]     ",
         }
     )
+}
+
+fn print_poem(poem: &Vec<String>) {
+    const COUNT: usize = 3;
+    for line in poem.iter().take(COUNT) {
+        println!("{line}");
+    }
+    if poem.len() > COUNT {
+        println!("...");
+    }
 }
