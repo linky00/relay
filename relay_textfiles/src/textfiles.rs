@@ -167,7 +167,7 @@ impl Textfiles {
         )?;
 
         let watcher = debouncer.watcher();
-        watcher.watch(&path, RecursiveMode::Recursive)?;
+        watcher.watch(&path, RecursiveMode::NonRecursive)?;
 
         self.watchers.lock().push(Box::new(debouncer));
 
