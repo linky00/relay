@@ -9,8 +9,8 @@ name = "{relay_name}"
 
 # uncomment below to add a relay, duplicate to add more relays
 # [[paired_relays]]
-# key = ""
 # nickname = ""
+# key = ""
 # # endpoint = ""
 
 # uncomment below to enable listener
