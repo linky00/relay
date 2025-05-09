@@ -252,7 +252,7 @@ impl EventPrinter {
                 print_from_source(
                     Source::Sender,
                     format!(
-                        "Sent {} envelopes listener relay {}",
+                        "Sent {} envelopes to listener relay {}",
                         envelopes.len(),
                         Self::relay_display(relay)
                     ),
