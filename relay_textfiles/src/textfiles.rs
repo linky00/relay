@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use notify::{RecommendedWatcher, RecursiveMode};
+use notify::{PollWatcher, RecursiveMode};
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use parking_lot::Mutex;
 use pem::{Pem, PemError};
@@ -58,7 +58,7 @@ pub enum TextfilesError {
 #[derive(Debug, Clone)]
 pub struct Textfiles {
     paths: Paths,
-    watchers: Arc<Mutex<Vec<Box<Debouncer<RecommendedWatcher>>>>>,
+    watchers: Arc<Mutex<Vec<Box<Debouncer<PollWatcher>>>>>,
 }
 
 impl Textfiles {
@@ -155,10 +155,16 @@ impl Textfiles {
     fn watch_file(&self, path: PathBuf) -> Result<WatcherReceiver, TextfilesError> {
         let (tx, rx) = mpsc::unbounded_channel();
 
-        let mut debouncer =
-            notify_debouncer_mini::new_debouncer(Duration::from_secs(1), move |event| {
+        let mut debouncer = notify_debouncer_mini::new_debouncer_opt::<_, PollWatcher>(
+            notify_debouncer_mini::Config::default()
+                .with_timeout(Duration::from_secs(1))
+                .with_notify_config(
+                    notify::Config::default().with_poll_interval(Duration::from_secs(1)),
+                ),
+            move |event| {
                 let _ = tx.send(event);
-            })?;
+            },
+        )?;
 
         let watcher = debouncer.watcher();
         watcher.watch(&path, RecursiveMode::Recursive)?;
