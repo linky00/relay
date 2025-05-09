@@ -218,6 +218,19 @@ impl EventPrinter {
                     ),
                 );
             }
+            Event::ListenerSentToSender(relay_data, envelopes) => {
+                print_from_source(
+                    Source::Listener,
+                    format!(
+                        "Sent {} envelopes to sender relay {}",
+                        envelopes.len(),
+                        match relay_data {
+                            Some(relay_data) => Self::relay_display(relay_data),
+                            None => "[unknown relay]".into(),
+                        }
+                    ),
+                );
+            }
             Event::ListenerReceivedBadPayload => {
                 print_from_source(Source::Listener, "Received bad payload");
             }

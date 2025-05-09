@@ -33,12 +33,7 @@ pub async fn send_to_listeners<L>(
     let handles: Vec<_> = config
         .trusted_relays
         .iter()
-        .filter_map(|relay| {
-            relay
-                .endpoint
-                .as_ref()
-                .map(|endpoint| (relay.clone(), endpoint.clone()))
-        })
+        .filter_map(|relay| relay.endpoint.as_ref().map(|endpoint| (relay, endpoint)))
         .map(|(relay, endpoint)| {
             let client = client.clone();
             let mailroom = Arc::clone(&mailroom);
@@ -62,7 +57,7 @@ pub async fn send_to_listeners<L>(
                 };
 
                 match client
-                    .post(endpoint)
+                    .post(endpoint.clone())
                     .header(CONTENT_TYPE, "application/json")
                     .body(outgoing_envelopes.create_payload())
                     .send()
@@ -182,7 +177,7 @@ where
         Ok(()) => {
             event_sender
                 .send(Event::ListenerReceivedFromSender(
-                    relay_data,
+                    relay_data.clone(),
                     trusted_payload.envelopes().clone(),
                 ))
                 .ok();
@@ -194,7 +189,15 @@ where
             );
 
             match outgoing_envelopes.await {
-                Ok(outgoing_envelopes) => Ok(outgoing_envelopes.create_payload()),
+                Ok(outgoing_envelopes) => {
+                    event_sender
+                        .send(Event::ListenerSentToSender(
+                            relay_data,
+                            outgoing_envelopes.envelopes.clone(),
+                        ))
+                        .ok();
+                    Ok(outgoing_envelopes.create_payload())
+                }
                 Err(error) => {
                     event_sender
                         .send(Event::ListenerDBError(error.to_string()))
