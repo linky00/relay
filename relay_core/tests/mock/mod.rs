@@ -90,6 +90,14 @@ impl MockRelay {
             .any(|message| message.contents.line == line)
     }
 
+    pub fn has_message_from(&self, from_key: PublicKey) -> bool {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|message| *message.certificate.key == from_key.to_string())
+    }
+
     pub fn has_forwarded_from(&self, from_key: PublicKey) -> bool {
         self.envelopes.lock().unwrap().iter().any(|envelope| {
             envelope

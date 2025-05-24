@@ -3,7 +3,11 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use mock::{MockReceivePayloadError, MockRelay};
-use relay_core::{crypto::SecretKey, mailroom::MailroomError, payload::UntrustedPayloadError};
+use relay_core::{
+    crypto::SecretKey,
+    mailroom::{DEFAULT_INITIAL_TTL, MailroomError},
+    payload::UntrustedPayloadError,
+};
 
 mod mock;
 
@@ -164,4 +168,29 @@ async fn relay_chain() {
     assert!(relay_b.has_message_with_line(&relay_a_line));
     assert!(relay_c.has_message_with_line(&relay_a_line));
     assert!(relay_c.has_forwarded_from(relay_b.public_key));
+}
+
+#[tokio::test]
+async fn ttl_exhaustion() {
+    let mut current_relay = MockRelay::new("origin");
+    let origin_key = current_relay.public_key;
+    let mut current_time = Utc::now();
+
+    for i in 0..DEFAULT_INITIAL_TTL {
+        let mut next_relay = MockRelay::new(&i.to_string());
+        mutually_trust(&mut current_relay, &mut next_relay);
+        exchange_payloads(&mut current_relay, &mut next_relay, current_time)
+            .await
+            .unwrap();
+        assert!(next_relay.has_message_from(origin_key));
+        current_relay = next_relay;
+        current_time += Duration::from_secs(3600);
+    }
+
+    let mut final_relay = MockRelay::new("last");
+    mutually_trust(&mut current_relay, &mut final_relay);
+    exchange_payloads(&mut current_relay, &mut final_relay, current_time)
+        .await
+        .unwrap();
+    assert!(!final_relay.has_message_from(origin_key));
 }
