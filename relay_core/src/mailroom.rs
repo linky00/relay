@@ -230,7 +230,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             let contents = MessageContents {
                 uuid: uuid::Uuid::new_v4().hyphenated().to_string(),
                 author: next_line.author.clone(),
-                line: next_line.line.into(),
+                line: next_line.line,
             };
 
             let contents_json = serde_json::to_string(&contents)

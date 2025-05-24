@@ -49,7 +49,7 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     println!("Starting relay \"{}\"...", initial_relayt_config.name);
     println!("Public key: {}", secret_key.public_key());
     print!("{initial_relayt_config}");
-    if initial_poem.len() > 0 {
+    if !initial_poem.is_empty() {
         println!("Poem:");
         print_poem(&initial_poem);
     }
@@ -86,7 +86,7 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     tokio::spawn(async move {
         let mut last_config = initial_relayt_config;
         while let Some(events) = config_change_rx.recv().await {
-            if let Ok(_) = events {
+            if events.is_ok() {
                 match textfiles_clone.read_config() {
                     Ok(new_config) => {
                         if new_config.name != last_config.name {
@@ -132,7 +132,7 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     tokio::spawn(async move {
         let mut last_poem = initial_poem;
         while let Some(events) = poem_change_rx.recv().await {
-            if let Ok(_) = events {
+            if events.is_ok() {
                 match textfiles.read_poem() {
                     Ok(new_poem) => {
                         if new_poem != last_poem {
@@ -377,7 +377,7 @@ fn print_from_source<S: Display>(source: Source, line: S) {
     )
 }
 
-fn print_poem(poem: &Vec<String>) {
+fn print_poem(poem: &[String]) {
     const COUNT: usize = 3;
     for line in poem.iter().take(COUNT) {
         println!("{line}");

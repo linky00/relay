@@ -13,9 +13,9 @@ use relay_core::{
 
 #[derive(Debug)]
 pub enum MockReceivePayloadError {
-    CannotReadPayload(UntrustedPayloadError),
-    CannotTrustPayload(UntrustedPayloadError),
-    CannotReceiveInMailroom(MailroomError<()>),
+    ReadPayload(UntrustedPayloadError),
+    TrustPayload(UntrustedPayloadError),
+    ReceiveInMailroom(MailroomError<()>),
 }
 
 pub struct MockRelay {
@@ -61,15 +61,15 @@ impl MockRelay {
         payload: &str,
         at: DateTime<Utc>,
     ) -> Result<(), MockReceivePayloadError> {
-        let unverified_payload = UntrustedPayload::from_json(payload)
-            .map_err(|e| MockReceivePayloadError::CannotReadPayload(e))?;
+        let unverified_payload =
+            UntrustedPayload::from_json(payload).map_err(MockReceivePayloadError::ReadPayload)?;
         let verified_payload = unverified_payload
             .try_trust(self.trusted_keys.clone())
-            .map_err(|e| MockReceivePayloadError::CannotTrustPayload(e))?;
+            .map_err(MockReceivePayloadError::TrustPayload)?;
         self.mailroom
             .receive_payload_at_time(&verified_payload, at)
             .await
-            .map_err(|e| MockReceivePayloadError::CannotReceiveInMailroom(e))?;
+            .map_err(MockReceivePayloadError::ReceiveInMailroom)?;
         Ok(())
     }
 

@@ -32,17 +32,17 @@ impl DBArchive {
         if !Sqlite::database_exists(&db_url).await.unwrap_or(false) {
             Sqlite::create_database(&db_url)
                 .await
-                .map_err(|e| DBError::Create(e))?;
+                .map_err(DBError::Create)?;
         }
 
         let pool = SqlitePool::connect(&db_url)
             .await
-            .map_err(|e| DBError::Connect(e))?;
+            .map_err(DBError::Connect)?;
 
         sqlx::migrate!()
             .run(&pool)
             .await
-            .map_err(|e| DBError::Migration(e))?;
+            .map_err(DBError::Migration)?;
 
         Ok(Self { pool, event_sender })
     }

@@ -58,7 +58,7 @@ pub enum TextfilesError {
 #[derive(Debug, Clone)]
 pub struct Textfiles {
     paths: Paths,
-    watchers: Arc<Mutex<Vec<Box<Debouncer<PollWatcher>>>>>,
+    watchers: Arc<Mutex<Vec<Debouncer<PollWatcher>>>>,
 }
 
 impl Textfiles {
@@ -169,7 +169,7 @@ impl Textfiles {
         let watcher = debouncer.watcher();
         watcher.watch(&path, RecursiveMode::NonRecursive)?;
 
-        self.watchers.lock().push(Box::new(debouncer));
+        self.watchers.lock().push(debouncer);
 
         Ok(rx)
     }
@@ -184,7 +184,7 @@ impl Textfiles {
         Ok(fs::read_to_string(&self.paths.poem_path)?
             .lines()
             .map(|line| line.trim())
-            .filter(|line| line.len() > 0)
+            .filter(|line| !line.is_empty())
             .map(String::from)
             .collect())
     }

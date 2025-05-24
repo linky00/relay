@@ -54,7 +54,7 @@ pub async fn do_cli() -> Result<()> {
             Commands::Init { dir, name, debug } => {
                 let path = Path::new(&dir);
                 let relay_name = name.as_deref().unwrap_or(get_relay_name_from_dir(path));
-                match Textfiles::init_regular(&path, relay_name, &SecretKey::generate(), debug) {
+                match Textfiles::init_regular(path, relay_name, &SecretKey::generate(), debug) {
                     Ok(()) => {
                         println!("Created relay \"{relay_name}\"")
                     }
@@ -65,7 +65,7 @@ pub async fn do_cli() -> Result<()> {
             }
             Commands::InitStore { dir } => {
                 let path = Path::new(&dir);
-                match Textfiles::init_store(&path, &SecretKey::generate()) {
+                match Textfiles::init_store(path, &SecretKey::generate()) {
                     Ok(()) => {
                         println!("Created store directory")
                     }

@@ -67,7 +67,7 @@ impl<'de> Deserialize<'de> for PublicKey {
         D: serde::Deserializer<'de>,
     {
         let key_string = String::deserialize(deserializer)?;
-        Ok(PublicKey::new_from_b64(&key_string).map_err(de::Error::custom)?)
+        PublicKey::new_from_b64(&key_string).map_err(de::Error::custom)
     }
 }
 
@@ -127,7 +127,7 @@ impl<'de> Deserialize<'de> for SecretKey {
         D: serde::Deserializer<'de>,
     {
         let key_string = String::deserialize(deserializer)?;
-        Ok(SecretKey::new_from_b64(&key_string).map_err(de::Error::custom)?)
+        SecretKey::new_from_b64(&key_string).map_err(de::Error::custom)
     }
 }
 

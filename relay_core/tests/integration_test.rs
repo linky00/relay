@@ -39,7 +39,7 @@ async fn reject_malformed() {
         relay_a
             .receive_payload("{\"fact\": \"this json is nonsense\"}", Utc::now())
             .await,
-        Err(MockReceivePayloadError::CannotReadPayload(
+        Err(MockReceivePayloadError::ReadPayload(
             UntrustedPayloadError::CannotParseJson
         ))
     ))
@@ -52,7 +52,7 @@ async fn reject_untrusted() {
 
     assert!(matches!(
         send_payload(&mut relay_a, &mut relay_b, Utc::now()).await,
-        Err(MockReceivePayloadError::CannotTrustPayload(
+        Err(MockReceivePayloadError::TrustPayload(
             UntrustedPayloadError::PublicKeyNotTrusted
         ))
     ));
@@ -70,7 +70,7 @@ async fn reject_already_received_this_hour() {
     send_payload(&mut relay_a, &mut relay_b, now).await.unwrap();
     assert!(matches!(
         send_payload(&mut relay_a, &mut relay_b, now).await,
-        Err(MockReceivePayloadError::CannotReceiveInMailroom(
+        Err(MockReceivePayloadError::ReceiveInMailroom(
             MailroomError::AlreadyReceivedFromKey
         ))
     ));

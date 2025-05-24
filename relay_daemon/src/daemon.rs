@@ -133,9 +133,10 @@ where
                         let config = Arc::clone(&config);
                         let event_sender = event_sender.clone();
                         Box::pin(async move {
+                            let config = config.read().await.to_owned();
                             exchange::send_to_listeners(
                                 Arc::clone(&mailroom),
-                                &config.read().await.to_owned(),
+                                &config,
                                 event_sender.clone(),
                             )
                             .await;
@@ -191,10 +192,11 @@ where
         State(state): State<Arc<ListenerState<L>>>,
         body: String,
     ) -> impl IntoResponse {
+        let config = &state.config.read().await.to_owned();
         exchange::respond_to_sender(
             &body,
             Arc::clone(&state.mailroom),
-            &state.config.read().await.to_owned(),
+            config,
             state.event_sender.clone(),
         )
         .await

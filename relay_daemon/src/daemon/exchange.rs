@@ -183,8 +183,8 @@ where
                 .ok();
 
             let outgoing_envelopes = mailroom.get_outgoing_at_time(
-                &trusted_payload.public_key(),
-                create_ttl_config(&config),
+                trusted_payload.public_key(),
+                create_ttl_config(config),
                 now,
             );
 
