@@ -150,6 +150,7 @@ async fn relay_chain() {
     assert!(relay_a.has_message_with_line(&relay_a_line));
     assert!(relay_b.has_message_with_line(&relay_a_line));
     assert!(!relay_c.has_message_with_line(&relay_a_line));
+    assert!(!relay_c.has_forwarded_from(relay_b.public_key));
 
     let an_hour_later = now + Duration::from_secs(3600);
     exchange_payloads(&mut relay_a, &mut relay_b, an_hour_later)
@@ -162,4 +163,5 @@ async fn relay_chain() {
     assert!(relay_a.has_message_with_line(&relay_a_line));
     assert!(relay_b.has_message_with_line(&relay_a_line));
     assert!(relay_c.has_message_with_line(&relay_a_line));
+    assert!(relay_c.has_forwarded_from(relay_b.public_key));
 }

@@ -90,6 +90,15 @@ impl MockRelay {
             .any(|message| message.contents.line == line)
     }
 
+    pub fn has_forwarded_from(&self, from_key: PublicKey) -> bool {
+        self.envelopes.lock().unwrap().iter().any(|envelope| {
+            envelope
+                .forwarded
+                .iter()
+                .any(|forwarded| *forwarded == from_key.to_string())
+        })
+    }
+
     pub fn current_line(&self) -> Option<String> {
         self.mailroom
             .current_message

@@ -175,6 +175,9 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
                 envelope.ttl = ttl_config.max_forwarding_ttl.min(envelope.ttl - 1);
+                envelope
+                    .forwarded
+                    .push(self.secret_key.public_key().to_string());
                 if envelope.ttl > 0 {
                     Some(envelope)
                 } else {
