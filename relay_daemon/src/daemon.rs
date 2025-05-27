@@ -5,7 +5,7 @@ use axum::{Router, extract::State, response::IntoResponse, routing};
 use chrono::{DateTime, Timelike, Utc};
 use relay_core::{
     crypto::SecretKey,
-    mailroom::{GetNextLine, Mailroom},
+    mailroom::{GetNextLine, Mailroom, MailroomError},
 };
 use thiserror::Error;
 use tokio::{
@@ -26,6 +26,8 @@ pub const DEFAULT_LISTENING_PORT: u16 = 7070;
 
 #[derive(Error, Debug)]
 pub enum DaemonError {
+    #[error("mailroom error: {0}")]
+    MailroomError(#[from] MailroomError<DBError>),
     #[error("cannot start db connection")]
     CannotConnectToDB,
     #[error("cannot bind port {0} (is it in use?)")]
@@ -63,7 +65,7 @@ where
             line_generator,
             db_archive,
             secret_key,
-        )));
+        )?));
 
         let config = Arc::new(RwLock::new(config));
 
@@ -101,7 +103,7 @@ where
             secret_key,
             flatten_time,
             interval,
-        )));
+        )?));
 
         let config = Arc::new(RwLock::new(config));
 

@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use chrono::Utc;
 use futures::future;
 use relay_core::{
-    mailroom::{GetNextLine, Mailroom, MailroomError, TTLConfig},
+    mailroom::{GetNextLine, Mailroom, MailroomError, OutgoingConfig},
     payload::UntrustedPayload,
 };
 use reqwest::{Client, header::CONTENT_TYPE};
@@ -28,7 +28,7 @@ pub async fn send_to_listeners<L>(
 
     let now = Utc::now();
     let client = Client::new();
-    let ttl_config = create_ttl_config(config);
+    let outgoing_config = create_outgoing_config(config);
 
     let handles: Vec<_> = config
         .trusted_relays
@@ -44,7 +44,7 @@ pub async fn send_to_listeners<L>(
                 let outgoing_envelopes = match mailroom
                     .lock()
                     .await
-                    .get_outgoing_at_time(&relay.key, ttl_config, now)
+                    .get_outgoing_at_time(&relay.key, outgoing_config, now)
                     .await
                 {
                     Ok(outgoing_envelopes) => outgoing_envelopes,
@@ -73,7 +73,7 @@ pub async fn send_to_listeners<L>(
 
                         let handle_response = async || {
                             if !response.status().is_success() {
-                                return Err(Event::SenderReceivedHttpError(
+                                return Some(Event::SenderReceivedHttpError(
                                     relay.clone(),
                                     format!(
                                         "{}: {}",
@@ -83,17 +83,31 @@ pub async fn send_to_listeners<L>(
                                 ));
                             }
 
-                            let response_text = response
-                                .text()
-                                .await
-                                .map_err(|_| Event::SenderReceivedBadResponse(relay.clone()))?;
+                            let response_text = match response.text().await {
+                                Ok(response_text) => response_text,
+                                Err(_) => {
+                                    return Some(Event::SenderReceivedBadResponse(relay.clone()));
+                                }
+                            };
 
-                            let untrusted_payload = UntrustedPayload::from_json(&response_text)
-                                .map_err(|_| Event::SenderReceivedBadResponse(relay.clone()))?;
+                            let untrusted_payload =
+                                match UntrustedPayload::from_json(&response_text) {
+                                    Ok(untrusted_payload) => untrusted_payload,
+                                    Err(_) => {
+                                        return Some(Event::SenderReceivedBadResponse(
+                                            relay.clone(),
+                                        ));
+                                    }
+                                };
 
-                            let trusted_payload = untrusted_payload
+                            let trusted_payload = match untrusted_payload
                                 .try_trust(config.trusted_public_keys())
-                                .map_err(|_| Event::SenderReceivedBadResponse(relay.clone()))?;
+                            {
+                                Ok(trusted_payload) => trusted_payload,
+                                Err(_) => {
+                                    return Some(Event::SenderReceivedBadResponse(relay.clone()));
+                                }
+                            };
 
                             match mailroom
                                 .lock()
@@ -101,21 +115,22 @@ pub async fn send_to_listeners<L>(
                                 .receive_payload_at_time(&trusted_payload, now)
                                 .await
                             {
-                                Ok(()) => Ok(Event::SenderReceivedFromListener(
+                                Ok(()) => Some(Event::SenderReceivedFromListener(
                                     relay.clone(),
                                     trusted_payload.envelopes().clone(),
                                 )),
                                 Err(MailroomError::AlreadyReceivedFromKey) => {
-                                    Ok(Event::SenderAlreadyReceivedFromListener(relay.clone()))
+                                    Some(Event::SenderAlreadyReceivedFromListener(relay.clone()))
                                 }
                                 Err(MailroomError::ArchiveFailure(error)) => {
-                                    Ok(Event::SenderDBError(error.to_string()))
+                                    Some(Event::SenderDBError(error.to_string()))
                                 }
                             }
                         };
 
-                        let event = handle_response().await.unwrap_or_else(|e| e);
-                        event_sender.send(event).ok();
+                        if let Some(event) = handle_response().await {
+                            event_sender.send(event).ok();
+                        }
                     }
                     Err(error) => {
                         event_sender
@@ -184,7 +199,7 @@ where
 
             let outgoing_envelopes = mailroom.get_outgoing_at_time(
                 trusted_payload.public_key(),
-                create_ttl_config(config),
+                create_outgoing_config(config),
                 now,
             );
 
@@ -230,6 +245,10 @@ where
     }
 }
 
-fn create_ttl_config(config: &DaemonConfig) -> TTLConfig {
-    TTLConfig::new(config.custom_initial_ttl, config.custom_max_forwarding_ttl)
+fn create_outgoing_config(config: &DaemonConfig) -> OutgoingConfig {
+    OutgoingConfig::new(
+        Some(config.send_on_minute),
+        config.custom_initial_ttl,
+        config.custom_max_forwarding_ttl,
+    )
 }

@@ -6,7 +6,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use relay_core::{
     crypto::{PublicKey, SecretKey},
-    mailroom::{Archive, GetNextLine, Mailroom, MailroomError, NextLine, TTLConfig},
+    mailroom::{Archive, GetNextLine, Mailroom, MailroomError, NextLine, OutgoingConfig},
     message::{Envelope, Message},
     payload::{UntrustedPayload, UntrustedPayloadError},
 };
@@ -25,6 +25,7 @@ pub struct MockRelay {
     #[allow(dead_code)]
     envelopes: Arc<Mutex<Vec<Envelope>>>,
     messages: Arc<Mutex<HashSet<Message>>>,
+    send_on_minute: u32,
 }
 
 impl MockRelay {
@@ -45,12 +46,12 @@ impl MockRelay {
                     messages: Arc::clone(&messages),
                 },
                 secret_key,
-                send_on_minute,
             )
             .unwrap(),
             trusted_keys: HashSet::new(),
             envelopes,
             messages,
+            send_on_minute,
         }
     }
 
@@ -78,7 +79,11 @@ impl MockRelay {
     pub async fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
         let outgoing_envelopes = self
             .mailroom
-            .get_outgoing_at_time(&for_key, TTLConfig::default(), at)
+            .get_outgoing_at_time(
+                &for_key,
+                OutgoingConfig::new(Some(self.send_on_minute), None, None),
+                at,
+            )
             .await
             .unwrap();
         outgoing_envelopes.create_payload()

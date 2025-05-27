@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::event::{Event, EventSender};
 
 #[derive(Error, Debug)]
-pub(crate) enum DBError {
+pub enum DBError {
     #[error("cannot create db: {0}")]
     Create(#[source] SqlxError),
     #[error("cannot connect to db: {0}")]

@@ -41,6 +41,7 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     let secret_key = textfiles.read_secret()?;
     let db_url = textfiles.archive_path().as_os_str().try_into()?;
     let daemon_config = DaemonConfig {
+        send_on_minute: initial_relayt_config.minute,
         trusted_relays: initial_relayt_config.trusted_relays.clone(),
         custom_initial_ttl: initial_relayt_config.initial_ttl,
         custom_max_forwarding_ttl: initial_relayt_config.max_forwarding_ttl,
@@ -93,12 +94,14 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
                             line_generator_clone.lock().author = new_config.name.clone();
                         }
 
-                        if new_config.trusted_relays != last_config.trusted_relays
+                        if new_config.minute != last_config.minute
+                            || new_config.trusted_relays != last_config.trusted_relays
                             || new_config.initial_ttl != last_config.initial_ttl
                             || new_config.max_forwarding_ttl != last_config.max_forwarding_ttl
                         {
                             relay_daemon
                                 .update_config(DaemonConfig {
+                                    send_on_minute: new_config.minute,
                                     trusted_relays: new_config.trusted_relays.clone(),
                                     custom_initial_ttl: new_config.initial_ttl,
                                     custom_max_forwarding_ttl: new_config.max_forwarding_ttl,

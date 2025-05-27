@@ -17,8 +17,6 @@ pub const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
 
 #[derive(Error, Debug)]
 pub enum MailroomError<E> {
-    #[error("send_on_minute not less than 60")]
-    MinuteNotLessThan60,
     #[error("already received payload from this key")]
     AlreadyReceivedFromKey,
     #[error("{0}")]
@@ -31,7 +29,6 @@ pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
     secret_key: SecretKey,
     flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
     interval: Duration,
-    send_on_minute: Option<u32>,
     new_messages: HashSet<Message>,
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
@@ -44,7 +41,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         line_generator: L,
         archive: A,
         secret_key: SecretKey,
-        send_on_minute: u32,
     ) -> Result<Self, MailroomError<E>> {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
@@ -60,7 +56,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             secret_key,
             flatten_time,
             Duration::from_secs(60),
-            Some(send_on_minute),
         )
     }
 
@@ -72,14 +67,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
     ) -> Result<Self, MailroomError<E>> {
-        Self::new_internal(
-            line_generator,
-            archive,
-            secret_key,
-            flatten_time,
-            interval,
-            None,
-        )
+        Self::new_internal(line_generator, archive, secret_key, flatten_time, interval)
     }
 
     fn new_internal(
@@ -88,21 +76,13 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         secret_key: SecretKey,
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
-        send_on_minute: Option<u32>,
     ) -> Result<Self, MailroomError<E>> {
-        if let Some(send_on_minute) = send_on_minute {
-            if send_on_minute >= 60 {
-                return Err(MailroomError::MinuteNotLessThan60);
-            }
-        }
-
         let mut mailroom = Mailroom {
             line_generator,
             archive,
             secret_key,
             flatten_time,
             interval,
-            send_on_minute,
             new_messages: HashSet::new(),
             forwarding_received_this_hour: HashMap::new(),
             forwarding_received_last_hour: HashMap::new(),
@@ -175,9 +155,9 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
     pub async fn get_outgoing(
         &mut self,
         sending_to: &PublicKey,
-        ttl_config: TTLConfig,
+        outgoing_config: OutgoingConfig,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
-        self.get_outgoing_internal(sending_to, ttl_config, Utc::now())
+        self.get_outgoing_internal(sending_to, outgoing_config, Utc::now())
             .await
     }
 
@@ -185,17 +165,17 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
     pub async fn get_outgoing_at_time(
         &mut self,
         sending_to: &PublicKey,
-        ttl_config: TTLConfig,
+        outgoing_config: OutgoingConfig,
         now: DateTime<Utc>,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
-        self.get_outgoing_internal(sending_to, ttl_config, now)
+        self.get_outgoing_internal(sending_to, outgoing_config, now)
             .await
     }
 
     async fn get_outgoing_internal(
         &mut self,
         sending_to: &PublicKey,
-        ttl_config: TTLConfig,
+        outgoing_config: OutgoingConfig,
         now: DateTime<Utc>,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.handle_time(now);
@@ -206,7 +186,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             .filter(|(from_key, _)| *from_key != sending_to)
             .flat_map(|(_, envelopes)| envelopes.iter().cloned())
             .filter_map(|mut envelope| {
-                envelope.ttl = ttl_config.max_forwarding_ttl.min(envelope.ttl - 1);
+                envelope.ttl = outgoing_config.max_forwarding_ttl.min(envelope.ttl - 1);
                 envelope
                     .forwarded
                     .push(self.secret_key.public_key().to_string());
@@ -219,13 +199,13 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             .collect();
 
         if let Some(current_message) = &self.current_message {
-            if self
+            if outgoing_config
                 .send_on_minute
                 .is_none_or(|send_on_minute| now.minute() == send_on_minute)
             {
                 let envelope = Envelope {
                     forwarded: vec![],
-                    ttl: ttl_config.initial_ttl,
+                    ttl: outgoing_config.initial_ttl,
                     message: current_message.clone(),
                 };
 
@@ -301,23 +281,30 @@ pub struct OutgoingEnvelopes {
 }
 
 #[derive(Clone, Copy)]
-pub struct TTLConfig {
+pub struct OutgoingConfig {
+    send_on_minute: Option<u32>,
     initial_ttl: u8,
     max_forwarding_ttl: u8,
 }
 
-impl TTLConfig {
-    pub fn new(initial_ttl: Option<u8>, max_forwarding_ttl: Option<u8>) -> Self {
+impl OutgoingConfig {
+    pub fn new(
+        send_on_minute: Option<u32>,
+        custom_inital_ttl: Option<u8>,
+        custom_max_forwarding_ttl: Option<u8>,
+    ) -> Self {
         Self {
-            initial_ttl: initial_ttl.unwrap_or(DEFAULT_INITIAL_TTL),
-            max_forwarding_ttl: max_forwarding_ttl.unwrap_or(DEFAULT_MAX_FORWARDING_TTL),
+            send_on_minute,
+            initial_ttl: custom_inital_ttl.unwrap_or(DEFAULT_INITIAL_TTL),
+            max_forwarding_ttl: custom_max_forwarding_ttl.unwrap_or(DEFAULT_MAX_FORWARDING_TTL),
         }
     }
 }
 
-impl Default for TTLConfig {
+impl Default for OutgoingConfig {
     fn default() -> Self {
         Self {
+            send_on_minute: Some(0),
             initial_ttl: DEFAULT_INITIAL_TTL,
             max_forwarding_ttl: DEFAULT_MAX_FORWARDING_TTL,
         }

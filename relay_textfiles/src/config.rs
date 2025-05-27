@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RelaytConfig {
     pub name: String,
+    pub minute: u32,
     #[serde(default)]
     pub listener: Option<ListeningConfig>,
     pub initial_ttl: Option<u8>,

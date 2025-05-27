@@ -7,6 +7,7 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DaemonConfig {
+    pub send_on_minute: u32,
     pub trusted_relays: Vec<RelayData>,
     pub custom_initial_ttl: Option<u8>,
     pub custom_max_forwarding_ttl: Option<u8>,
@@ -16,11 +17,6 @@ impl DaemonConfig {
     pub(crate) fn trusted_public_keys(&self) -> Vec<PublicKey> {
         self.trusted_relays.iter().map(|relay| relay.key).collect()
     }
-}
-
-#[derive(Clone)]
-pub struct ListenerConfig {
-    pub custom_port: Option<u16>,
 }
 
 #[derive(Error, Debug)]
