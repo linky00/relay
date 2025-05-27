@@ -24,6 +24,7 @@ pub struct ListeningConfig {
 impl Display for RelaytConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Name: {}", self.name)?;
+        writeln!(f, "Minute: {}", self.minute)?;
         if let Some(initial_ttl) = self.initial_ttl {
             writeln!(f, "Initial TTL: {initial_ttl}")?;
         }
