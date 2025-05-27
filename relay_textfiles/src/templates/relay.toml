@@ -9,13 +9,13 @@ minute = 0
 # uncomment below to set max ttl that will be forwarded
 # max_forwarding_ttl = {default_max_forwarding_ttl}
 
-# uncomment below to add a relay, duplicate to add more relays
+# uncomment below to add a relay, duplicate block to add more relays
 # [[paired_relays]]
 # nickname = ""
 # key = ""
-# # endpoint = ""
+# endpoint = ""
 
 # uncomment below to enable listener
 # [listener]
-# # uncomment below to set listening port
-# # port = {default_listening_port}
+# uncomment below to set listening port
+# port = {default_listening_port}
