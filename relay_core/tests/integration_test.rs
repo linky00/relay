@@ -119,9 +119,11 @@ async fn send_same_line_in_same_minute() {
 }
 
 #[tokio::test]
-async fn send_no_message_in_different_minute() {
+async fn send_no_message_in_wrong_minute() {
     let now = Utc::now();
     let mut relay_a = MockRelay::new("a", now.minute());
+
+    assert!(relay_a.message_count() == 0);
 
     relay_a
         .create_payload(SecretKey::generate().public_key(), now)

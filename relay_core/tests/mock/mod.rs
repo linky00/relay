@@ -24,6 +24,7 @@ pub struct MockRelay {
     envelopes: Arc<Mutex<Vec<Envelope>>>,
     messages: Arc<Mutex<HashSet<Message>>>,
     send_on_minute: u32,
+    last_message: Arc<Mutex<Option<String>>>,
     message_count: Arc<Mutex<u32>>,
 }
 
@@ -33,6 +34,7 @@ impl MockRelay {
 
         let envelopes = Arc::new(Mutex::new(vec![]));
         let messages = Arc::new(Mutex::new(HashSet::new()));
+        let last_message = Arc::new(Mutex::new(None));
         let message_count = Arc::new(Mutex::new(0));
 
         MockRelay {
@@ -40,6 +42,7 @@ impl MockRelay {
             mailroom: Mailroom::new(
                 MockLineGenerator {
                     name: name.to_owned(),
+                    last_message: Arc::clone(&last_message),
                     message_count: Arc::clone(&message_count),
                 },
                 MockArchive {
@@ -53,6 +56,7 @@ impl MockRelay {
             envelopes,
             messages,
             send_on_minute,
+            last_message,
             message_count,
         }
     }
@@ -119,23 +123,23 @@ impl MockRelay {
     }
 
     pub fn current_line(&self) -> Option<String> {
-        self.mailroom
-            .current_message
-            .clone()
-            .map(|message| message.contents.line)
+        self.last_message.lock().clone()
     }
 }
 
 struct MockLineGenerator {
     name: String,
+    last_message: Arc<Mutex<Option<String>>>,
     message_count: Arc<Mutex<u32>>,
 }
 
 impl GetNextLine for MockLineGenerator {
     fn get_next_line(&mut self) -> Option<NextLine> {
+        let line = format!("{}: {}", self.name, uuid::Uuid::new_v4().hyphenated());
+        *self.last_message.lock() = Some(line.clone());
         *self.message_count.lock() += 1;
         Some(NextLine {
-            line: format!("{}: {}", self.name, uuid::Uuid::new_v4().hyphenated()),
+            line,
             author: self.name.clone(),
         })
     }

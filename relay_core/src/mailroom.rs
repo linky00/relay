@@ -32,7 +32,7 @@ pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
     new_messages: HashSet<Message>,
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
-    pub current_message: Option<Message>,
+    current_message: Option<Message>,
     last_seen_time: Option<DateTime<Utc>>,
 }
 
@@ -77,7 +77,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
     ) -> Result<Self, MailroomError<E>> {
-        let mut mailroom = Mailroom {
+        let mailroom = Mailroom {
             line_generator,
             archive,
             secret_key,
@@ -89,8 +89,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             current_message: None,
             last_seen_time: None,
         };
-
-        mailroom.set_new_message();
 
         Ok(mailroom)
     }
@@ -116,7 +114,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         payload: &TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), MailroomError<E>> {
-        self.handle_time(now);
+        self.handle_time(now, false);
 
         if self
             .forwarding_received_this_hour
@@ -178,7 +176,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         outgoing_config: OutgoingConfig,
         now: DateTime<Utc>,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
-        let new_time_bracket = self.handle_time(now);
+        self.handle_time(now, Self::message_this_minute(now, outgoing_config));
 
         let mut sending_envelopes: Vec<Envelope> = self
             .forwarding_received_last_hour
@@ -198,13 +196,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             })
             .collect();
 
-        if outgoing_config
-            .send_on_minute
-            .is_none_or(|send_on_minute| now.minute() == send_on_minute)
-        {
-            if new_time_bracket {
-                self.set_new_message();
-            }
+        if Self::message_this_minute(now, outgoing_config) {
             if let Some(current_message) = &self.current_message {
                 let envelope = Envelope {
                     forwarded: vec![],
@@ -227,14 +219,12 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         })
     }
 
-    fn handle_time(&mut self, now: DateTime<Utc>) -> bool {
-        let mut new_time_bracket = false;
-        if let Some(last_seen_time) = self.last_seen_time {
+    fn handle_time(&mut self, now: DateTime<Utc>, sending_message_this_minute: bool) {
+        let new_time_bracket = if let Some(last_seen_time) = self.last_seen_time {
             let now_flattened = (self.flatten_time)(now);
             let last_seen_flattened = (self.flatten_time)(last_seen_time);
 
             if now_flattened != last_seen_flattened {
-                new_time_bracket = true;
                 self.forwarding_received_last_hour =
                     if now_flattened == last_seen_flattened + self.interval {
                         self.forwarding_received_this_hour.clone()
@@ -243,12 +233,20 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
                     };
                 self.forwarding_received_this_hour = HashMap::new();
                 self.new_messages = HashSet::new();
+
+                true
+            } else {
+                false
             }
+        } else {
+            true
+        };
+
+        if new_time_bracket && sending_message_this_minute {
+            self.set_new_message();
         }
 
         self.last_seen_time = Some(now);
-
-        new_time_bracket
     }
 
     fn set_new_message(&mut self) {
@@ -277,6 +275,12 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         } else {
             None
         }
+    }
+
+    fn message_this_minute(now: DateTime<Utc>, outgoing_config: OutgoingConfig) -> bool {
+        outgoing_config
+            .send_on_minute
+            .is_none_or(|send_on_minute| now.minute() == send_on_minute)
     }
 }
 
