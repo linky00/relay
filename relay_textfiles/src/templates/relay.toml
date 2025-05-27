@@ -1,5 +1,7 @@
 # set name of the relay
 name = "{relay_name}"
+# set to a minute of the hour (0-59)
+minute = 0
 
 # uncomment below to set initial ttl for created envelopes
 # initial_ttl = {default_initial_ttl}
