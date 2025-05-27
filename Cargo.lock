@@ -1863,6 +1863,7 @@ dependencies = [
  "ed25519-dalek",
  "itertools",
  "json-syntax",
+ "parking_lot",
  "rand",
  "serde",
  "serde_json",

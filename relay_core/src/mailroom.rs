@@ -178,7 +178,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         outgoing_config: OutgoingConfig,
         now: DateTime<Utc>,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
-        self.handle_time(now);
+        let new_time_bracket = self.handle_time(now);
 
         let mut sending_envelopes: Vec<Envelope> = self
             .forwarding_received_last_hour
@@ -198,11 +198,14 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             })
             .collect();
 
-        if let Some(current_message) = &self.current_message {
-            if outgoing_config
-                .send_on_minute
-                .is_none_or(|send_on_minute| now.minute() == send_on_minute)
-            {
+        if outgoing_config
+            .send_on_minute
+            .is_none_or(|send_on_minute| now.minute() == send_on_minute)
+        {
+            if new_time_bracket {
+                self.set_new_message();
+            }
+            if let Some(current_message) = &self.current_message {
                 let envelope = Envelope {
                     forwarded: vec![],
                     ttl: outgoing_config.initial_ttl,
@@ -224,12 +227,14 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         })
     }
 
-    fn handle_time(&mut self, now: DateTime<Utc>) {
+    fn handle_time(&mut self, now: DateTime<Utc>) -> bool {
+        let mut new_time_bracket = false;
         if let Some(last_seen_time) = self.last_seen_time {
             let now_flattened = (self.flatten_time)(now);
             let last_seen_flattened = (self.flatten_time)(last_seen_time);
 
             if now_flattened != last_seen_flattened {
+                new_time_bracket = true;
                 self.forwarding_received_last_hour =
                     if now_flattened == last_seen_flattened + self.interval {
                         self.forwarding_received_this_hour.clone()
@@ -238,11 +243,12 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
                     };
                 self.forwarding_received_this_hour = HashMap::new();
                 self.new_messages = HashSet::new();
-                self.set_new_message();
             }
         }
 
         self.last_seen_time = Some(now);
+
+        new_time_bracket
     }
 
     fn set_new_message(&mut self) {
