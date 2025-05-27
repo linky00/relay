@@ -14,10 +14,11 @@ use crate::{
 
 pub const DEFAULT_INITIAL_TTL: u8 = 8;
 pub const DEFAULT_MAX_FORWARDING_TTL: u8 = 8;
-const HOUR_IN_SECONDS: u64 = 60 * 60;
 
 #[derive(Error, Debug)]
 pub enum MailroomError<E> {
+    #[error("send_on_minute not less than 60")]
+    MinuteNotLessThan60,
     #[error("already received payload from this key")]
     AlreadyReceivedFromKey,
     #[error("{0}")]
@@ -30,6 +31,7 @@ pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
     secret_key: SecretKey,
     flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
     interval: Duration,
+    send_on_minute: Option<u32>,
     new_messages: HashSet<Message>,
     forwarding_received_this_hour: HashMap<PublicKey, Vec<Envelope>>,
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
@@ -38,33 +40,28 @@ pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
 }
 
 impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
-    pub fn new(line_generator: L, archive: A, secret_key: SecretKey) -> Self {
+    pub fn new(
+        line_generator: L,
+        archive: A,
+        secret_key: SecretKey,
+        send_on_minute: u32,
+    ) -> Result<Self, MailroomError<E>> {
         let flatten_time = |datetime: DateTime<Utc>| {
             datetime
-                .with_minute(0)
-                .expect("should be able to set any utc time to minute 0")
                 .with_second(0)
                 .expect("should be able to set any utc time to second 0")
                 .with_nanosecond(0)
                 .expect("should be able to set any utc time to nanosecond 0")
         };
 
-        let mut mailroom = Mailroom {
+        Self::new_internal(
             line_generator,
             archive,
             secret_key,
             flatten_time,
-            interval: Duration::from_secs(HOUR_IN_SECONDS),
-            new_messages: HashSet::new(),
-            forwarding_received_this_hour: HashMap::new(),
-            forwarding_received_last_hour: HashMap::new(),
-            current_message: None,
-            last_seen_time: None,
-        };
-
-        mailroom.set_new_message();
-
-        mailroom
+            Duration::from_secs(60),
+            Some(send_on_minute),
+        )
     }
 
     #[cfg(feature = "chrono")]
@@ -74,13 +71,48 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         secret_key: SecretKey,
         flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
         interval: Duration,
-    ) -> Mailroom<L, A, E> {
-        let mut mailroom = Self::new(line_generator, archive, secret_key);
+    ) -> Result<Self, MailroomError<E>> {
+        Self::new_internal(
+            line_generator,
+            archive,
+            secret_key,
+            flatten_time,
+            interval,
+            None,
+        )
+    }
 
-        mailroom.flatten_time = flatten_time;
-        mailroom.interval = interval;
+    fn new_internal(
+        line_generator: L,
+        archive: A,
+        secret_key: SecretKey,
+        flatten_time: fn(DateTime<Utc>) -> DateTime<Utc>,
+        interval: Duration,
+        send_on_minute: Option<u32>,
+    ) -> Result<Self, MailroomError<E>> {
+        if let Some(send_on_minute) = send_on_minute {
+            if send_on_minute >= 60 {
+                return Err(MailroomError::MinuteNotLessThan60);
+            }
+        }
 
-        mailroom
+        let mut mailroom = Mailroom {
+            line_generator,
+            archive,
+            secret_key,
+            flatten_time,
+            interval,
+            send_on_minute,
+            new_messages: HashSet::new(),
+            forwarding_received_this_hour: HashMap::new(),
+            forwarding_received_last_hour: HashMap::new(),
+            current_message: None,
+            last_seen_time: None,
+        };
+
+        mailroom.set_new_message();
+
+        Ok(mailroom)
     }
 
     pub async fn receive_payload(
@@ -187,18 +219,23 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             .collect();
 
         if let Some(current_message) = &self.current_message {
-            let envelope = Envelope {
-                forwarded: vec![],
-                ttl: ttl_config.initial_ttl,
-                message: current_message.clone(),
-            };
+            if self
+                .send_on_minute
+                .is_none_or(|send_on_minute| now.minute() == send_on_minute)
+            {
+                let envelope = Envelope {
+                    forwarded: vec![],
+                    ttl: ttl_config.initial_ttl,
+                    message: current_message.clone(),
+                };
 
-            self.archive
-                .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
-                .await
-                .map_err(|e| MailroomError::ArchiveFailure(e))?;
+                self.archive
+                    .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
+                    .await
+                    .map_err(|e| MailroomError::ArchiveFailure(e))?;
 
-            sending_envelopes.push(envelope);
+                sending_envelopes.push(envelope);
+            }
         }
 
         Ok(OutgoingEnvelopes {

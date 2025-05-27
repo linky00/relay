@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use itertools::Itertools;
 use mock::{MockReceivePayloadError, MockRelay};
 use relay_core::{
@@ -37,7 +37,7 @@ async fn exchange_payloads(
 
 #[tokio::test]
 async fn reject_malformed() {
-    let mut relay_a = MockRelay::new("a");
+    let mut relay_a = MockRelay::new("a", 0);
 
     assert!(matches!(
         relay_a
@@ -51,8 +51,8 @@ async fn reject_malformed() {
 
 #[tokio::test]
 async fn reject_untrusted() {
-    let mut relay_a = MockRelay::new("a");
-    let mut relay_b = MockRelay::new("b");
+    let mut relay_a = MockRelay::new("a", 0);
+    let mut relay_b = MockRelay::new("b", 0);
 
     assert!(matches!(
         send_payload(&mut relay_a, &mut relay_b, Utc::now()).await,
@@ -63,9 +63,9 @@ async fn reject_untrusted() {
 }
 
 #[tokio::test]
-async fn reject_already_received_this_hour() {
-    let mut relay_a = MockRelay::new("a");
-    let mut relay_b = MockRelay::new("b");
+async fn reject_already_received_this_minute() {
+    let mut relay_a = MockRelay::new("a", 0);
+    let mut relay_b = MockRelay::new("b", 0);
 
     mutually_trust(&mut relay_a, &mut relay_b);
 
@@ -82,9 +82,9 @@ async fn reject_already_received_this_hour() {
 
 #[tokio::test]
 async fn send_different_line_every_hour() {
-    let mut relay_a = MockRelay::new("a");
-
     let mut time = Utc::now();
+    let mut relay_a = MockRelay::new("a", time.minute());
+
     let mut lines = vec![];
 
     for _ in 0..10 {
@@ -95,14 +95,14 @@ async fn send_different_line_every_hour() {
         time += Duration::from_secs(3600);
     }
 
-    assert!(lines.iter().all_unique())
+    assert!(lines.iter().all(|line| line.is_some()));
+    assert!(lines.iter().all_unique());
 }
 
 #[tokio::test]
 async fn send_same_line_in_same_hour() {
-    let mut relay_a = MockRelay::new("a");
-
     let now = Utc::now();
+    let mut relay_a = MockRelay::new("a", now.minute());
 
     relay_a
         .create_payload(SecretKey::generate().public_key(), now)
@@ -119,12 +119,13 @@ async fn send_same_line_in_same_hour() {
 
 #[tokio::test]
 async fn relay_exchange() {
-    let mut relay_a = MockRelay::new("a");
-    let mut relay_b = MockRelay::new("b");
+    let now = Utc::now();
+    let mut relay_a = MockRelay::new("a", now.minute());
+    let mut relay_b = MockRelay::new("b", now.minute());
 
     mutually_trust(&mut relay_a, &mut relay_b);
 
-    exchange_payloads(&mut relay_a, &mut relay_b, Utc::now())
+    exchange_payloads(&mut relay_a, &mut relay_b, now)
         .await
         .unwrap();
 
@@ -134,14 +135,15 @@ async fn relay_exchange() {
 
 #[tokio::test]
 async fn relay_chain() {
-    let mut relay_a = MockRelay::new("a");
-    let mut relay_b = MockRelay::new("b");
-    let mut relay_c = MockRelay::new("c");
+    let now = Utc::now();
+
+    let mut relay_a = MockRelay::new("a", now.minute());
+    let mut relay_b = MockRelay::new("b", 0);
+    let mut relay_c = MockRelay::new("c", 0);
 
     mutually_trust(&mut relay_a, &mut relay_b);
     mutually_trust(&mut relay_b, &mut relay_c);
 
-    let now = Utc::now();
     exchange_payloads(&mut relay_a, &mut relay_b, now)
         .await
         .unwrap();
@@ -156,11 +158,12 @@ async fn relay_chain() {
     assert!(!relay_c.has_message_with_line(&relay_a_line));
     assert!(!relay_c.has_forwarded_from(relay_b.public_key));
 
-    let an_hour_later = now + Duration::from_secs(3600);
-    exchange_payloads(&mut relay_a, &mut relay_b, an_hour_later)
+    let a_minute_later = now + Duration::from_secs(60);
+
+    exchange_payloads(&mut relay_a, &mut relay_b, a_minute_later)
         .await
         .unwrap();
-    exchange_payloads(&mut relay_b, &mut relay_c, an_hour_later)
+    exchange_payloads(&mut relay_b, &mut relay_c, a_minute_later)
         .await
         .unwrap();
 
@@ -172,22 +175,22 @@ async fn relay_chain() {
 
 #[tokio::test]
 async fn ttl_exhaustion() {
-    let mut current_relay = MockRelay::new("origin");
-    let origin_key = current_relay.public_key;
     let mut current_time = Utc::now();
+    let mut current_relay = MockRelay::new("origin", current_time.minute());
+    let origin_key = current_relay.public_key;
 
     for i in 0..DEFAULT_INITIAL_TTL {
-        let mut next_relay = MockRelay::new(&i.to_string());
+        let mut next_relay = MockRelay::new(&i.to_string(), 0);
         mutually_trust(&mut current_relay, &mut next_relay);
         exchange_payloads(&mut current_relay, &mut next_relay, current_time)
             .await
             .unwrap();
         assert!(next_relay.has_message_from(origin_key));
         current_relay = next_relay;
-        current_time += Duration::from_secs(3600);
+        current_time += Duration::from_secs(60);
     }
 
-    let mut final_relay = MockRelay::new("last");
+    let mut final_relay = MockRelay::new("last", 0);
     mutually_trust(&mut current_relay, &mut final_relay);
     exchange_payloads(&mut current_relay, &mut final_relay, current_time)
         .await

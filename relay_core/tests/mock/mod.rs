@@ -28,7 +28,7 @@ pub struct MockRelay {
 }
 
 impl MockRelay {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, send_on_minute: u32) -> Self {
         let secret_key = SecretKey::generate();
 
         let envelopes = Arc::new(Mutex::new(vec![]));
@@ -45,7 +45,9 @@ impl MockRelay {
                     messages: Arc::clone(&messages),
                 },
                 secret_key,
-            ),
+                send_on_minute,
+            )
+            .unwrap(),
             trusted_keys: HashSet::new(),
             envelopes,
             messages,
