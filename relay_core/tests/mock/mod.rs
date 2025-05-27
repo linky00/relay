@@ -1,9 +1,7 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, sync::Arc};
 
 use chrono::{DateTime, Utc};
+use parking_lot::Mutex;
 use relay_core::{
     crypto::{PublicKey, SecretKey},
     mailroom::{Archive, GetNextLine, Mailroom, MailroomError, NextLine, OutgoingConfig},
@@ -26,6 +24,7 @@ pub struct MockRelay {
     envelopes: Arc<Mutex<Vec<Envelope>>>,
     messages: Arc<Mutex<HashSet<Message>>>,
     send_on_minute: u32,
+    message_count: Arc<Mutex<u32>>,
 }
 
 impl MockRelay {
@@ -34,12 +33,14 @@ impl MockRelay {
 
         let envelopes = Arc::new(Mutex::new(vec![]));
         let messages = Arc::new(Mutex::new(HashSet::new()));
+        let message_count = Arc::new(Mutex::new(0));
 
         MockRelay {
             public_key: secret_key.public_key(),
             mailroom: Mailroom::new(
                 MockLineGenerator {
                     name: name.to_owned(),
+                    message_count: Arc::clone(&message_count),
                 },
                 MockArchive {
                     envelopes: Arc::clone(&envelopes),
@@ -52,7 +53,12 @@ impl MockRelay {
             envelopes,
             messages,
             send_on_minute,
+            message_count,
         }
+    }
+
+    pub fn message_count(&self) -> u32 {
+        *self.message_count.lock()
     }
 
     pub fn add_trusted_key(&mut self, key: PublicKey) {
@@ -92,7 +98,6 @@ impl MockRelay {
     pub fn has_message_with_line(&self, line: &str) -> bool {
         self.messages
             .lock()
-            .unwrap()
             .iter()
             .any(|message| message.contents.line == line)
     }
@@ -100,13 +105,12 @@ impl MockRelay {
     pub fn has_message_from(&self, from_key: PublicKey) -> bool {
         self.messages
             .lock()
-            .unwrap()
             .iter()
             .any(|message| *message.certificate.key == from_key.to_string())
     }
 
     pub fn has_forwarded_from(&self, from_key: PublicKey) -> bool {
-        self.envelopes.lock().unwrap().iter().any(|envelope| {
+        self.envelopes.lock().iter().any(|envelope| {
             envelope
                 .forwarded
                 .iter()
@@ -124,10 +128,12 @@ impl MockRelay {
 
 struct MockLineGenerator {
     name: String,
+    message_count: Arc<Mutex<u32>>,
 }
 
 impl GetNextLine for MockLineGenerator {
     fn get_next_line(&mut self) -> Option<NextLine> {
+        *self.message_count.lock() += 1;
         Some(NextLine {
             line: format!("{}: {}", self.name, uuid::Uuid::new_v4().hyphenated()),
             author: self.name.clone(),
@@ -144,15 +150,12 @@ impl Archive for MockArchive {
     type Error = ();
 
     async fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
-        self.envelopes.lock().unwrap().push(envelope.clone());
-        self.messages
-            .lock()
-            .unwrap()
-            .insert(envelope.message.clone());
+        self.envelopes.lock().push(envelope.clone());
+        self.messages.lock().insert(envelope.message.clone());
         Ok(())
     }
 
     async fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
-        Ok(self.messages.lock().unwrap().contains(message))
+        Ok(self.messages.lock().contains(message))
     }
 }

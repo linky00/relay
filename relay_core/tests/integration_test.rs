@@ -97,10 +97,11 @@ async fn send_different_line_every_hour() {
 
     assert!(lines.iter().all(|line| line.is_some()));
     assert!(lines.iter().all_unique());
+    assert!(relay_a.message_count() == 10);
 }
 
 #[tokio::test]
-async fn send_same_line_in_same_hour() {
+async fn send_same_line_in_same_minute() {
     let now = Utc::now();
     let mut relay_a = MockRelay::new("a", now.minute());
 
@@ -115,6 +116,24 @@ async fn send_same_line_in_same_hour() {
     let second_line = relay_a.current_line();
 
     assert_eq!(first_line, second_line);
+}
+
+#[tokio::test]
+async fn send_no_message_in_different_minute() {
+    let now = Utc::now();
+    let mut relay_a = MockRelay::new("a", now.minute());
+
+    relay_a
+        .create_payload(SecretKey::generate().public_key(), now)
+        .await;
+    assert!(relay_a.message_count() == 1);
+
+    let one_minute_later = now + Duration::from_secs(60);
+
+    relay_a
+        .create_payload(SecretKey::generate().public_key(), one_minute_later)
+        .await;
+    assert!(relay_a.message_count() == 1);
 }
 
 #[tokio::test]
@@ -171,6 +190,7 @@ async fn relay_chain() {
     assert!(relay_b.has_message_with_line(&relay_a_line));
     assert!(relay_c.has_message_with_line(&relay_a_line));
     assert!(relay_c.has_forwarded_from(relay_b.public_key));
+    assert!(relay_a.message_count() == 1);
 }
 
 #[tokio::test]
