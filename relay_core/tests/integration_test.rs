@@ -97,7 +97,7 @@ async fn send_different_line_every_hour() {
 
     assert!(lines.iter().all(|line| line.is_some()));
     assert!(lines.iter().all_unique());
-    assert!(relay_a.message_count() == 10);
+    assert_eq!(relay_a.message_count(), 10);
 }
 
 #[tokio::test]
@@ -123,19 +123,19 @@ async fn send_no_message_in_wrong_minute() {
     let now = Utc::now();
     let mut relay_a = MockRelay::new("a", now.minute());
 
-    assert!(relay_a.message_count() == 0);
+    assert_eq!(relay_a.message_count(), 0);
 
     relay_a
         .create_payload(SecretKey::generate().public_key(), now)
         .await;
-    assert!(relay_a.message_count() == 1);
+    assert_eq!(relay_a.message_count(), 1);
 
     let one_minute_later = now + Duration::from_secs(60);
 
     relay_a
         .create_payload(SecretKey::generate().public_key(), one_minute_later)
         .await;
-    assert!(relay_a.message_count() == 1);
+    assert_eq!(relay_a.message_count(), 1);
 }
 
 #[tokio::test]
@@ -150,6 +150,8 @@ async fn relay_exchange() {
         .await
         .unwrap();
 
+    assert_eq!(relay_a.message_count(), 1);
+    assert_eq!(relay_b.message_count(), 1);
     assert!(relay_b.has_message_with_line(&relay_a.current_line().unwrap()));
     assert!(relay_a.has_message_with_line(&relay_b.current_line().unwrap()));
 }

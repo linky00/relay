@@ -34,6 +34,7 @@ pub struct Mailroom<L: GetNextLine, A: Archive<Error = E>, E> {
     forwarding_received_last_hour: HashMap<PublicKey, Vec<Envelope>>,
     current_message: Option<Message>,
     last_seen_time: Option<DateTime<Utc>>,
+    last_updated_message_time: Option<DateTime<Utc>>,
 }
 
 impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
@@ -88,6 +89,7 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             forwarding_received_last_hour: HashMap::new(),
             current_message: None,
             last_seen_time: None,
+            last_updated_message_time: None,
         };
 
         Ok(mailroom)
@@ -219,34 +221,32 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         })
     }
 
-    fn handle_time(&mut self, now: DateTime<Utc>, sending_message_this_minute: bool) {
-        let new_time_bracket = if let Some(last_seen_time) = self.last_seen_time {
-            let now_flattened = (self.flatten_time)(now);
-            let last_seen_flattened = (self.flatten_time)(last_seen_time);
+    fn handle_time(&mut self, now: DateTime<Utc>, is_sending_message: bool) {
+        let now_flattened = (self.flatten_time)(now);
 
-            if now_flattened != last_seen_flattened {
+        if let Some(last_seen_time) = self.last_seen_time {
+            if now_flattened != last_seen_time {
                 self.forwarding_received_last_hour =
-                    if now_flattened == last_seen_flattened + self.interval {
+                    if now_flattened == last_seen_time + self.interval {
                         self.forwarding_received_this_hour.clone()
                     } else {
                         HashMap::new()
                     };
                 self.forwarding_received_this_hour = HashMap::new();
                 self.new_messages = HashSet::new();
-
-                true
-            } else {
-                false
             }
-        } else {
-            true
-        };
-
-        if new_time_bracket && sending_message_this_minute {
-            self.set_new_message();
         }
 
-        self.last_seen_time = Some(now);
+        self.last_seen_time = Some(now_flattened);
+
+        if self
+            .last_updated_message_time
+            .is_none_or(|time| time != now_flattened)
+            && is_sending_message
+        {
+            self.set_new_message();
+            self.last_updated_message_time = Some(now_flattened);
+        }
     }
 
     fn set_new_message(&mut self) {
