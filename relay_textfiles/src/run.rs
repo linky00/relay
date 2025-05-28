@@ -1,8 +1,8 @@
-use std::{fmt::Display, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
 use parking_lot::Mutex;
-use print::EventPrinter;
+use print::{Printer, Source};
 use relay_core::mailroom::{GetNextLine, NextLine};
 use relay_daemon::{config::DaemonConfig, daemon::Daemon};
 use tokio::sync::mpsc;
@@ -29,11 +29,12 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     };
     let line_generator = line_generator_wrapper.line_generator.clone();
 
-    let event_printer = EventPrinter::new(textfiles.clone());
+    let event_printer = Arc::new(Mutex::new(Printer::new(textfiles.clone())));
+    let event_printer_clone = Arc::clone(&event_printer);
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
-            event_printer.print_event(event);
+            event_printer_clone.lock().print_event(event);
         }
     });
 
@@ -83,6 +84,7 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
     let mut config_change_rx = textfiles.watch_config_changes()?;
     let textfiles_clone = textfiles.clone();
     let line_generator_clone = Arc::clone(&line_generator);
+    let event_printer_clone = Arc::clone(&event_printer);
     tokio::spawn(async move {
         let mut last_config = initial_relayt_config;
         while let Some(events) = config_change_rx.recv().await {
@@ -109,21 +111,25 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
                         }
 
                         if new_config.listener != last_config.listener {
-                            print_from_source(
+                            event_printer_clone.lock().print_from_source(
                                 Source::Config,
                                 "Can't update listener at runtime yet!",
                             );
                         }
 
                         if new_config != last_config {
-                            print_from_source(Source::Config, "Updated config:");
+                            event_printer_clone
+                                .lock()
+                                .print_from_source(Source::Config, "Updated config:");
                             print!("{new_config}");
                         }
 
                         last_config = new_config;
                     }
                     Err(e) => {
-                        print_from_source(Source::Config, format!("Can't read config: {e}"));
+                        event_printer_clone
+                            .lock()
+                            .print_from_source(Source::Config, format!("Can't read config: {e}"));
                     }
                 }
             }
@@ -139,14 +145,18 @@ pub async fn run(dir_path: &Path, store_dir_path: Option<&Path>, debug_mode: boo
                     Ok(new_poem) => {
                         if new_poem != last_poem {
                             line_generator.lock().update_poem(new_poem.clone());
-                            print_from_source(Source::Poem, "Updated poem:");
+                            event_printer
+                                .lock()
+                                .print_from_source(Source::Poem, "Updated poem:");
                             print_poem(&new_poem);
                         }
 
                         last_poem = new_poem;
                     }
                     Err(e) => {
-                        print_from_source(Source::Poem, format!("Can't read poem: {e}"));
+                        event_printer
+                            .lock()
+                            .print_from_source(Source::Poem, format!("Can't read poem: {e}"));
                     }
                 }
             }
@@ -166,27 +176,6 @@ fn print_poem(poem: &[String]) {
     if poem.len() > COUNT {
         println!("...");
     }
-}
-
-enum Source {
-    Listener,
-    Sender,
-    Archive,
-    Config,
-    Poem,
-}
-
-fn print_from_source<S: Display>(source: Source, line: S) {
-    println!(
-        "{}{line}",
-        match source {
-            Source::Listener => "[Listener] ",
-            Source::Sender => "[Sender]   ",
-            Source::Archive => "[Archive]  ",
-            Source::Config => "[Config]   ",
-            Source::Poem => "[Poem]     ",
-        }
-    )
 }
 
 struct LineGeneratorWrapper {
