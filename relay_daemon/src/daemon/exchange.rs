@@ -73,20 +73,20 @@ pub async fn send_to_listeners<L>(
 
                         let handle_response = async || {
                             if !response.status().is_success() {
-                                return Some(Event::SenderReceivedHttpError(
+                                return Event::SenderReceivedHttpError(
                                     relay.clone(),
                                     format!(
                                         "{}: {}",
                                         response.status().as_u16(),
                                         response.status().canonical_reason().unwrap_or_default()
                                     ),
-                                ));
+                                );
                             }
 
                             let response_text = match response.text().await {
                                 Ok(response_text) => response_text,
                                 Err(_) => {
-                                    return Some(Event::SenderReceivedBadResponse(relay.clone()));
+                                    return Event::SenderReceivedBadResponse(relay.clone());
                                 }
                             };
 
@@ -94,20 +94,17 @@ pub async fn send_to_listeners<L>(
                                 match UntrustedPayload::from_json(&response_text) {
                                     Ok(untrusted_payload) => untrusted_payload,
                                     Err(_) => {
-                                        return Some(Event::SenderReceivedBadResponse(
-                                            relay.clone(),
-                                        ));
+                                        return Event::SenderReceivedBadResponse(relay.clone());
                                     }
                                 };
 
-                            let trusted_payload = match untrusted_payload
-                                .try_trust(config.trusted_public_keys())
-                            {
-                                Ok(trusted_payload) => trusted_payload,
-                                Err(_) => {
-                                    return Some(Event::SenderReceivedBadResponse(relay.clone()));
-                                }
-                            };
+                            let trusted_payload =
+                                match untrusted_payload.try_trust(config.trusted_public_keys()) {
+                                    Ok(trusted_payload) => trusted_payload,
+                                    Err(_) => {
+                                        return Event::SenderReceivedBadResponse(relay.clone());
+                                    }
+                                };
 
                             match mailroom
                                 .lock()
@@ -115,22 +112,20 @@ pub async fn send_to_listeners<L>(
                                 .receive_payload_at_time(&trusted_payload, now)
                                 .await
                             {
-                                Ok(()) => Some(Event::SenderReceivedFromListener(
+                                Ok(()) => Event::SenderReceivedFromListener(
                                     relay.clone(),
                                     trusted_payload.envelopes().clone(),
-                                )),
+                                ),
                                 Err(MailroomError::AlreadyReceivedFromKey) => {
-                                    Some(Event::SenderAlreadyReceivedFromListener(relay.clone()))
+                                    Event::SenderAlreadyReceivedFromListener(relay.clone())
                                 }
                                 Err(MailroomError::ArchiveFailure(error)) => {
-                                    Some(Event::SenderDBError(error.to_string()))
+                                    Event::SenderDBError(error.to_string())
                                 }
                             }
                         };
 
-                        if let Some(event) = handle_response().await {
-                            event_sender.send(event).ok();
-                        }
+                        event_sender.send(handle_response().await).ok();
                     }
                     Err(error) => {
                         event_sender
