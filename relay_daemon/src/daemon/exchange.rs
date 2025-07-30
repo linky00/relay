@@ -41,12 +41,11 @@ pub async fn send_to_listeners<L>(
             let event_sender = event_sender.clone();
 
             async move {
-                let outgoing_envelopes = match mailroom
-                    .lock()
-                    .await
-                    .get_outgoing_at_time(&relay.key, outgoing_config, now)
-                    .await
-                {
+                let outgoing_envelopes = match mailroom.lock().await.get_outgoing_at_time(
+                    &relay.key,
+                    outgoing_config,
+                    now,
+                ) {
                     Ok(outgoing_envelopes) => outgoing_envelopes,
                     Err(error) => {
                         event_sender
@@ -110,7 +109,6 @@ pub async fn send_to_listeners<L>(
                                 .lock()
                                 .await
                                 .receive_payload_at_time(&trusted_payload, now)
-                                .await
                             {
                                 Ok(()) => Event::SenderReceivedFromListener(
                                     relay.clone(),
@@ -180,10 +178,7 @@ where
 
     let mut mailroom = mailroom.lock().await;
 
-    match mailroom
-        .receive_payload_at_time(&trusted_payload, now)
-        .await
-    {
+    match mailroom.receive_payload_at_time(&trusted_payload, now) {
         Ok(()) => {
             event_sender
                 .send(Event::ListenerReceivedFromSender(
@@ -198,7 +193,7 @@ where
                 now,
             );
 
-            match outgoing_envelopes.await {
+            match outgoing_envelopes {
                 Ok(outgoing_envelopes) => {
                     event_sender
                         .send(Event::ListenerSentToSender(

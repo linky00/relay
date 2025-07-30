@@ -5,6 +5,7 @@ use sqlx::{
     migrate::{MigrateDatabase, MigrateError},
 };
 use thiserror::Error;
+use tokio::runtime::Handle;
 
 use crate::event::{Event, EventSender};
 
@@ -51,90 +52,94 @@ impl DBArchive {
 impl Archive for DBArchive {
     type Error = DBError;
 
-    async fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error> {
-        Ok(sqlx::query!(
-            "
-            SELECT id 
-            FROM messages
-            WHERE signature = ?
-            LIMIT 1
-            ",
-            message.certificate.signature
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .is_some())
+    fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error> {
+        Handle::current().block_on(async {
+            Ok(sqlx::query!(
+                "
+                SELECT id 
+                FROM messages
+                WHERE signature = ?
+                LIMIT 1
+                ",
+                message.certificate.signature
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .is_some())
+        })
     }
 
-    async fn add_envelope_to_archive(
+    fn add_envelope_to_archive(
         &mut self,
         from: &str,
         envelope: &relay_core::message::Envelope,
     ) -> Result<(), Self::Error> {
-        let timestamp = Utc::now().timestamp();
+        Handle::current().block_on(async {
+            let timestamp = Utc::now().timestamp();
 
-        let message_id = if let Some(found_message) = sqlx::query!(
-            "
+            let message_id = if let Some(found_message) = sqlx::query!(
+                "
             SELECT id
             FROM messages
             WHERE signature = ?
             LIMIT 1
             ",
-            envelope.message.certificate.signature
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        {
-            found_message.id
-        } else {
-            self.event_sender
-                .send(Event::AddedMessageToArchive(envelope.message.clone()))
-                .ok();
+                envelope.message.certificate.signature
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            {
+                found_message.id
+            } else {
+                self.event_sender
+                    .send(Event::AddedMessageToArchive(envelope.message.clone()))
+                    .ok();
 
-            sqlx::query!(
-                "
+                sqlx::query!(
+                    "
                 INSERT INTO messages (from_key, signature, uuid, author, line, received_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ",
-                envelope.message.certificate.key,
-                envelope.message.certificate.signature,
-                envelope.message.contents.uuid,
-                envelope.message.contents.author,
-                envelope.message.contents.line,
-                timestamp
-            )
-            .execute(&self.pool)
-            .await?
-            .last_insert_rowid()
-        };
+                    envelope.message.certificate.key,
+                    envelope.message.certificate.signature,
+                    envelope.message.contents.uuid,
+                    envelope.message.contents.author,
+                    envelope.message.contents.line,
+                    timestamp
+                )
+                .execute(&self.pool)
+                .await?
+                .last_insert_rowid()
+            };
 
-        let envelope_id = sqlx::query!(
-            "
+            let envelope_id = sqlx::query!(
+                "
             INSERT INTO envelopes (from_key, ttl, received_at, message_id)
             VALUES (?, ?, ?, ?)
             ",
-            from,
-            envelope.ttl,
-            timestamp,
-            message_id
-        )
-        .execute(&self.pool)
-        .await?
-        .last_insert_rowid();
+                from,
+                envelope.ttl,
+                timestamp,
+                message_id
+            )
+            .execute(&self.pool)
+            .await?
+            .last_insert_rowid();
 
-        for forwarding_key in &envelope.forwarded {
-            sqlx::query!(
-                "
+            for forwarding_key in &envelope.forwarded {
+                sqlx::query!(
+                    "
                 INSERT INTO forwards (from_key, envelope_id)
                 VALUES (?, ?)
                 ",
-                forwarding_key,
-                envelope_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
+                    forwarding_key,
+                    envelope_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
 
-        Ok(())
+            Ok(())
+        })
     }
 }
