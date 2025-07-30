@@ -323,8 +323,7 @@ pub trait GetNextLine {
     fn get_next_line(&mut self) -> Option<NextLine>;
 }
 
-#[trait_variant::make(Archive: Send)]
-pub trait ArchiveLocal {
+pub trait Archive {
     type Error;
 
     fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error>;
