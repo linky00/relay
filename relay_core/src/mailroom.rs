@@ -95,23 +95,20 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         Ok(mailroom)
     }
 
-    pub async fn receive_payload(
-        &mut self,
-        payload: &TrustedPayload,
-    ) -> Result<(), MailroomError<E>> {
-        self.receive_payload_internal(payload, Utc::now()).await
+    pub fn receive_payload(&mut self, payload: &TrustedPayload) -> Result<(), MailroomError<E>> {
+        self.receive_payload_internal(payload, Utc::now())
     }
 
     #[cfg(feature = "chrono")]
-    pub async fn receive_payload_at_time(
+    pub fn receive_payload_at_time(
         &mut self,
         payload: &TrustedPayload,
         now: DateTime<Utc>,
     ) -> Result<(), MailroomError<E>> {
-        self.receive_payload_internal(payload, now).await
+        self.receive_payload_internal(payload, now)
     }
 
-    async fn receive_payload_internal(
+    fn receive_payload_internal(
         &mut self,
         payload: &TrustedPayload,
         now: DateTime<Utc>,
@@ -133,7 +130,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             } else if !self
                 .archive
                 .is_message_in_archive(&envelope.message)
-                .await
                 .map_err(|e| MailroomError::ArchiveFailure(e))?
             {
                 self.new_messages.insert(envelope.message.clone());
@@ -142,7 +138,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
 
             self.archive
                 .add_envelope_to_archive(&payload.certificate.key, envelope)
-                .await
                 .map_err(|e| MailroomError::ArchiveFailure(e))?;
         }
 
@@ -152,27 +147,25 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
         Ok(())
     }
 
-    pub async fn get_outgoing(
+    pub fn get_outgoing(
         &mut self,
         sending_to: &PublicKey,
         outgoing_config: OutgoingConfig,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.get_outgoing_internal(sending_to, outgoing_config, Utc::now())
-            .await
     }
 
     #[cfg(feature = "chrono")]
-    pub async fn get_outgoing_at_time(
+    pub fn get_outgoing_at_time(
         &mut self,
         sending_to: &PublicKey,
         outgoing_config: OutgoingConfig,
         now: DateTime<Utc>,
     ) -> Result<OutgoingEnvelopes, MailroomError<E>> {
         self.get_outgoing_internal(sending_to, outgoing_config, now)
-            .await
     }
 
-    async fn get_outgoing_internal(
+    fn get_outgoing_internal(
         &mut self,
         sending_to: &PublicKey,
         outgoing_config: OutgoingConfig,
@@ -208,7 +201,6 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
 
                 self.archive
                     .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
-                    .await
                     .map_err(|e| MailroomError::ArchiveFailure(e))?;
 
                 sending_envelopes.push(envelope);
@@ -335,9 +327,9 @@ pub trait GetNextLine {
 pub trait ArchiveLocal {
     type Error;
 
-    async fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error>;
+    fn is_message_in_archive(&self, message: &Message) -> Result<bool, Self::Error>;
 
-    async fn add_envelope_to_archive(
+    fn add_envelope_to_archive(
         &mut self,
         from: &str,
         envelope: &Envelope,

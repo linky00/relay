@@ -69,7 +69,7 @@ impl MockRelay {
         self.trusted_keys.insert(key);
     }
 
-    pub async fn receive_payload(
+    pub fn receive_payload(
         &mut self,
         payload: &str,
         at: DateTime<Utc>,
@@ -81,12 +81,11 @@ impl MockRelay {
             .map_err(MockReceivePayloadError::TrustPayload)?;
         self.mailroom
             .receive_payload_at_time(&verified_payload, at)
-            .await
             .map_err(MockReceivePayloadError::ReceiveInMailroom)?;
         Ok(())
     }
 
-    pub async fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
+    pub fn create_payload(&mut self, for_key: PublicKey, at: DateTime<Utc>) -> String {
         let outgoing_envelopes = self
             .mailroom
             .get_outgoing_at_time(
@@ -94,7 +93,6 @@ impl MockRelay {
                 OutgoingConfig::new(Some(self.send_on_minute), None, None),
                 at,
             )
-            .await
             .unwrap();
         outgoing_envelopes.create_payload()
     }
@@ -153,13 +151,13 @@ struct MockArchive {
 impl Archive for MockArchive {
     type Error = ();
 
-    async fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
+    fn add_envelope_to_archive(&mut self, _: &str, envelope: &Envelope) -> Result<(), ()> {
         self.envelopes.lock().push(envelope.clone());
         self.messages.lock().insert(envelope.message.clone());
         Ok(())
     }
 
-    async fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
+    fn is_message_in_archive(&self, message: &Message) -> Result<bool, ()> {
         Ok(self.messages.lock().contains(message))
     }
 }
