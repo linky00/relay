@@ -56,10 +56,10 @@ impl Archive for DBArchive {
         Handle::current().block_on(async {
             Ok(sqlx::query!(
                 "
-                SELECT id 
-                FROM messages
-                WHERE signature = ?
-                LIMIT 1
+                    SELECT id
+                    FROM messages
+                    WHERE signature = ?
+                    LIMIT 1
                 ",
                 message.certificate.signature
             )
@@ -79,11 +79,11 @@ impl Archive for DBArchive {
 
             let message_id = if let Some(found_message) = sqlx::query!(
                 "
-            SELECT id
-            FROM messages
-            WHERE signature = ?
-            LIMIT 1
-            ",
+                    SELECT id
+                    FROM messages
+                    WHERE signature = ?
+                    LIMIT 1
+                ",
                 envelope.message.certificate.signature
             )
             .fetch_optional(&self.pool)
@@ -97,9 +97,9 @@ impl Archive for DBArchive {
 
                 sqlx::query!(
                     "
-                INSERT INTO messages (from_key, signature, uuid, author, line, received_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ",
+                        INSERT INTO messages (from_key, signature, uuid, author, line, received_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ",
                     envelope.message.certificate.key,
                     envelope.message.certificate.signature,
                     envelope.message.contents.uuid,
@@ -114,9 +114,9 @@ impl Archive for DBArchive {
 
             let envelope_id = sqlx::query!(
                 "
-            INSERT INTO envelopes (from_key, ttl, received_at, message_id)
-            VALUES (?, ?, ?, ?)
-            ",
+                    INSERT INTO envelopes (from_key, ttl, received_at, message_id)
+                    VALUES (?, ?, ?, ?)
+                ",
                 from,
                 envelope.ttl,
                 timestamp,
@@ -129,9 +129,9 @@ impl Archive for DBArchive {
             for forwarding_key in &envelope.forwarded {
                 sqlx::query!(
                     "
-                INSERT INTO forwards (from_key, envelope_id)
-                VALUES (?, ?)
-                ",
+                        INSERT INTO forwards (from_key, envelope_id)
+                        VALUES (?, ?)
+                    ",
                     forwarding_key,
                     envelope_id
                 )
