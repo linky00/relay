@@ -191,20 +191,20 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
             })
             .collect();
 
-        if Self::message_this_minute(now, outgoing_config) {
-            if let Some(current_message) = &self.current_message {
-                let envelope = Envelope {
-                    forwarded: vec![],
-                    ttl: outgoing_config.initial_ttl,
-                    message: current_message.clone(),
-                };
+        if Self::message_this_minute(now, outgoing_config)
+            && let Some(current_message) = &self.current_message
+        {
+            let envelope = Envelope {
+                forwarded: vec![],
+                ttl: outgoing_config.initial_ttl,
+                message: current_message.clone(),
+            };
 
-                self.archive
-                    .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
-                    .map_err(|e| MailroomError::ArchiveFailure(e))?;
+            self.archive
+                .add_envelope_to_archive(&envelope.message.certificate.key, &envelope)
+                .map_err(|e| MailroomError::ArchiveFailure(e))?;
 
-                sending_envelopes.push(envelope);
-            }
+            sending_envelopes.push(envelope);
         }
 
         Ok(OutgoingEnvelopes {
@@ -216,17 +216,17 @@ impl<L: GetNextLine, A: Archive<Error = E>, E> Mailroom<L, A, E> {
     fn handle_time(&mut self, now: DateTime<Utc>, is_sending_message: bool) {
         let now_flattened = (self.flatten_time)(now);
 
-        if let Some(last_seen_time) = self.last_seen_time {
-            if now_flattened != last_seen_time {
-                self.forwarding_received_last_hour =
-                    if now_flattened == last_seen_time + self.interval {
-                        self.forwarding_received_this_hour.clone()
-                    } else {
-                        HashMap::new()
-                    };
-                self.forwarding_received_this_hour = HashMap::new();
-                self.new_messages = HashSet::new();
-            }
+        if let Some(last_seen_time) = self.last_seen_time
+            && now_flattened != last_seen_time
+        {
+            self.forwarding_received_last_hour = if now_flattened == last_seen_time + self.interval
+            {
+                self.forwarding_received_this_hour.clone()
+            } else {
+                HashMap::new()
+            };
+            self.forwarding_received_this_hour = HashMap::new();
+            self.new_messages = HashSet::new();
         }
 
         self.last_seen_time = Some(now_flattened);
